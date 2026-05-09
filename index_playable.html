@@ -932,11 +932,11 @@
       "XXXX"
     ];
     const boardUnlockLevels = [
-      [9, 9, 9, 9],
-      [7, 7, 9, 9],
-      [7, 7, 7, 7],
-      [5, 5, 5, 5],
-      [3, 3, 3, 3],
+      [8, 8, 8, 8],
+      [6, 6, 8, 8],
+      [6, 6, 6, 6],
+      [4, 4, 4, 4],
+      [2, 2, 2, 2],
       [1, 1, 1, 1],
       [1, 1, 1, 1],
       [1, 1, 1, 1],
@@ -974,15 +974,15 @@
     };
     const levelXpTable = [
       { level: 1, xp: 0 },
-      { level: 2, xp: 30 },
+      { level: 2, xp: 40 },
       { level: 3, xp: 100 },
-      { level: 4, xp: 220 },
-      { level: 5, xp: 400 },
-      { level: 6, xp: 650 },
-      { level: 7, xp: 980 },
-      { level: 8, xp: 1400 },
-      { level: 9, xp: 1950 },
-      { level: 10, xp: 2650 }
+      { level: 4, xp: 190 },
+      { level: 5, xp: 320 },
+      { level: 6, xp: 500 },
+      { level: 7, xp: 740 },
+      { level: 8, xp: 1040 },
+      { level: 9, xp: 1400 },
+      { level: 10, xp: 1820 }
     ];
     const levelUpSpawnerBonus = 10;
     let spawnerItems = maxSpawnerItems;
@@ -1015,7 +1015,7 @@
         finalFile: "Mafuyu_4.png",
         finalName: "Mafuyu 4",
         sleepFile: "Mafuyu_4_Sleep.png",
-        unlockLevel: 2
+        unlockLevel: 3
       },
       {
         id: "ena",
@@ -1026,7 +1026,7 @@
         finalFile: "Ena_4.png",
         finalName: "Ena 4",
         sleepFile: "Ena_4_Sleep.png",
-        unlockLevel: 3
+        unlockLevel: 5
       },
       {
         id: "mizuki",
@@ -1037,22 +1037,22 @@
         finalFile: "Mizuki_4.png",
         finalName: "Mizuki 4",
         sleepFile: "Mizuki_4_Sleep.png",
-        unlockLevel: 4
+        unlockLevel: 7
       }
     ];
     const spawnTable = [
       { file: "Kanade_1.png", name: "Kanade 1", chance: 90, unlockLevel: 1 },
       { file: "Kanade_2.png", name: "Kanade 2", chance: 9, unlockLevel: 1 },
       { file: "Kanade_3.png", name: "Kanade 3", chance: 1, unlockLevel: 1 },
-      { file: "Mafuyu_1.png", name: "Mafuyu 1", chance: 90, unlockLevel: 2 },
-      { file: "Mafuyu_2.png", name: "Mafuyu 2", chance: 9, unlockLevel: 2 },
-      { file: "Mafuyu_3.png", name: "Mafuyu 3", chance: 1, unlockLevel: 2 },
-      { file: "Ena_1.png", name: "Ena 1", chance: 90, unlockLevel: 3 },
-      { file: "Ena_2.png", name: "Ena 2", chance: 9, unlockLevel: 3 },
-      { file: "Ena_3.png", name: "Ena 3", chance: 1, unlockLevel: 3 },
-      { file: "Mizuki_1.png", name: "Mizuki 1", chance: 90, unlockLevel: 4 },
-      { file: "Mizuki_2.png", name: "Mizuki 2", chance: 9, unlockLevel: 4 },
-      { file: "Mizuki_3.png", name: "Mizuki 3", chance: 1, unlockLevel: 4 }
+      { file: "Mafuyu_1.png", name: "Mafuyu 1", chance: 90, unlockLevel: 3 },
+      { file: "Mafuyu_2.png", name: "Mafuyu 2", chance: 9, unlockLevel: 3 },
+      { file: "Mafuyu_3.png", name: "Mafuyu 3", chance: 1, unlockLevel: 3 },
+      { file: "Ena_1.png", name: "Ena 1", chance: 90, unlockLevel: 5 },
+      { file: "Ena_2.png", name: "Ena 2", chance: 9, unlockLevel: 5 },
+      { file: "Ena_3.png", name: "Ena 3", chance: 1, unlockLevel: 5 },
+      { file: "Mizuki_1.png", name: "Mizuki 1", chance: 90, unlockLevel: 7 },
+      { file: "Mizuki_2.png", name: "Mizuki 2", chance: 9, unlockLevel: 7 },
+      { file: "Mizuki_3.png", name: "Mizuki 3", chance: 1, unlockLevel: 7 }
     ];
     const mergeChain = {
       "Kanade_1.png": { file: "Kanade_2.png", name: "Kanade 2" },
@@ -1412,9 +1412,16 @@
     }
 
     function ensureActiveOrder() {
-      if (!activeOrder || !isCharacterRewardFile(activeOrder.file)) {
+      const orderConfig = activeOrder && characterConfigs.find((config) => config.rewardFile === activeOrder.file);
+      if (!orderConfig || orderConfig.unlockLevel > playerLevel) {
         activeOrder = createNextOrder();
+        return;
       }
+
+      activeOrder.name = `${orderConfig.finalName.replace(" 4", "")} reward`;
+      activeOrder.count = 1;
+      activeOrder.rewardCrates = 10;
+      activeOrder.rewardXp = 10;
     }
 
     function updateOrderPanel() {
