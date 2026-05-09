@@ -1,0 +1,2445 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Sekai Farm Merge Grid</title>
+  <style>
+    :root {
+      --viewport-w: 1536px;
+      --viewport-h: 738px;
+      --tile-w: 32px;
+      --tile-h: 15px;
+      --tile-img-h: 15px;
+      --zoom: 4.5;
+      --bg: #444466;
+      --shadow: rgba(15, 34, 54, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .viewport {
+      width: var(--viewport-w);
+      height: var(--viewport-h);
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      background: transparent;
+      box-shadow:
+        0 30px 60px rgba(16, 30, 48, 0.25),
+        inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .viewport.is-panning {
+      cursor: grabbing;
+    }
+
+    .iso-layer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+
+    .tile {
+      position: absolute;
+      width: var(--tile-w);
+      height: var(--tile-img-h);
+      background-image: var(--cube-image);
+      background-size: 100% 100%;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 6px 6px var(--shadow));
+    }
+
+    .tile::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      background: rgba(255, 255, 255, 0.28);
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      transition: opacity 120ms ease;
+    }
+
+    .tile:hover::after {
+      opacity: 1;
+    }
+
+    .tile-lock {
+      position: absolute;
+      width: var(--tile-w);
+      height: var(--tile-img-h);
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      filter: drop-shadow(0 6px 6px rgba(15, 34, 54, 0.35));
+    }
+
+    .board-object {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+    }
+
+    .board-object.is-dragging {
+      opacity: 0.35;
+      cursor: grabbing;
+    }
+
+    .board-item.is-dragging {
+      opacity: 0.35;
+      cursor: grabbing;
+    }
+
+    .board-item {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      pointer-events: auto;
+      cursor: grab;
+    }
+
+    .board-item .board-object {
+      left: 0;
+      top: 0;
+      transform: none;
+      transform-origin: center center;
+    }
+
+    .board-item.is-collectible {
+      cursor: pointer;
+    }
+
+    .board-item.is-sleeping {
+      cursor: default;
+    }
+
+    .timer-overlay {
+      position: absolute;
+      left: 50%;
+      top: 70%;
+      width: 5px;
+      height: 5px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .character-reward-popup {
+      position: absolute;
+      left: 50%;
+      top: -2px;
+      width: 20px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      transform: translate(-50%, -100%);
+      filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.35));
+      pointer-events: auto;
+      cursor: pointer;
+      animation: reward-hover 900ms ease-in-out infinite;
+    }
+
+    .character-reward-popup::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 9px solid rgba(255, 255, 255, 0.96);
+      transform: translateX(-50%);
+    }
+
+    .character-reward-popup img {
+      width: 14px;
+      height: 14px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      position: relative;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    @keyframes reward-hover {
+      0%, 100% {
+        transform: translate(-50%, -100%);
+      }
+      50% {
+        transform: translate(-50%, -112%);
+      }
+    }
+
+    .drag-ghost {
+      position: fixed;
+      z-index: 1000;
+      width: 96px;
+      height: 92px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+    }
+
+    .merge-flyer {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      z-index: 900;
+      filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      animation: merge-fly 720ms cubic-bezier(0.16, 0.9, 0.25, 1) forwards;
+    }
+
+    .merge-burst {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 901;
+      background: url("Asset/Sparkle.gif") center / contain no-repeat;
+      image-rendering: pixelated;
+      animation: merge-burst 760ms ease-out forwards;
+    }
+
+    .board-item.is-merge-result {
+      animation: merge-result-pop 460ms ease-out both;
+    }
+
+    .board-item.is-merge-consumed {
+      opacity: 0;
+    }
+
+    .board-item.is-merge-preview {
+      animation: merge-preview-pulse 760ms ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(255, 96, 150, 0.85));
+    }
+
+    .merge-count-popup {
+      position: absolute;
+      z-index: 905;
+      min-width: 12px;
+      height: 12px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #ff6096;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 12px;
+      text-align: center;
+      transform: translate(-50%, -185%);
+      pointer-events: none;
+      box-shadow: 0 3px 7px rgba(15, 34, 54, 0.28);
+    }
+
+    @keyframes merge-fly {
+      0% {
+        transform: translate(-50%, -100%) scale(1);
+        opacity: 1;
+      }
+      70% {
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy) - 5px)) scale(0.82);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy))) scale(0.35);
+        opacity: 0;
+      }
+    }
+
+    @keyframes merge-burst {
+      0% {
+        transform: translate(-50%, -50%) scale(0.72);
+        opacity: 0;
+      }
+      28% {
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1.8);
+        opacity: 0;
+      }
+    }
+
+    @keyframes merge-result-pop {
+      0% {
+        transform: translate(-50%, -100%) scale(0.82);
+        filter: brightness(1.25) drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      }
+      70% {
+        transform: translate(-50%, -100%) scale(1.06);
+      }
+      100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+    }
+
+    @keyframes merge-preview-pulse {
+      0%, 100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+      50% {
+        transform: translate(-50%, -104%) scale(1.08);
+      }
+    }
+
+    .soft-fade {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(900px 520px at 50% 42%, rgba(255, 255, 255, 0.16), transparent 72%);
+      pointer-events: none;
+    }
+
+    .reset-button {
+      position: absolute;
+      left: 22px;
+      top: 72px;
+      z-index: 20;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+    }
+
+    .reset-button:hover {
+      background: rgba(54, 54, 86, 0.9);
+    }
+
+    .xp-counter {
+      position: absolute;
+      left: 22px;
+      top: 22px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .xp-counter:hover {
+      background: rgba(54, 54, 86, 0.9);
+    }
+
+    .xp-counter img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .xp-detail {
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      min-width: 112px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.92);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+      transform: translateY(-50%);
+      box-shadow: 0 8px 18px rgba(15, 34, 54, 0.28);
+    }
+
+    .xp-detail[hidden] {
+      display: none;
+    }
+
+    .xp-note-flyer {
+      position: fixed;
+      left: var(--xp-start-x);
+      top: var(--xp-start-y);
+      z-index: 1200;
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(1);
+      filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.35));
+      animation: xp-note-fly 720ms cubic-bezier(0.16, 0.9, 0.25, 1) forwards;
+    }
+
+    @keyframes xp-note-fly {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+      }
+      15% {
+        opacity: 1;
+      }
+      72% {
+        transform:
+          translate(
+            calc(-50% + var(--xp-dx)),
+            calc(-50% + var(--xp-dy) - 14px)
+          )
+          scale(0.92);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(calc(-50% + var(--xp-dx)), calc(-50% + var(--xp-dy))) scale(0.58);
+        opacity: 0;
+      }
+    }
+
+    .spawner {
+      position: absolute;
+      left: 50%;
+      bottom: 54px;
+      z-index: 20;
+      width: 82px;
+      height: 82px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      transform: translateX(-50%);
+      cursor: pointer;
+      filter: drop-shadow(0 14px 10px rgba(15, 34, 54, 0.38));
+    }
+
+    .spawner-count {
+      position: absolute;
+      left: 50%;
+      bottom: -6px;
+      min-width: 72px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #ff6096;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+      transform: translateX(-50%);
+      box-shadow: 0 4px 10px rgba(15, 34, 54, 0.22);
+      pointer-events: none;
+    }
+
+    .spawner-timer {
+      position: absolute;
+      left: 50%;
+      bottom: -32px;
+      min-width: 86px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(36, 36, 58, 0.72);
+      color: #ff6096;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .spawner.is-empty {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
+
+    .spawner img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      transition: transform 120ms ease;
+    }
+
+    .spawner:hover img {
+      transform: translateY(-4px) scale(1.03);
+    }
+
+    .spawner:active img {
+      transform: translateY(2px) scale(0.96);
+    }
+
+    .cooldown-popup {
+      position: absolute;
+      z-index: 60;
+      min-width: 27px;
+      padding: 2px 3px 3px;
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.96);
+      color: #ff6096;
+      font-size: 5px;
+      font-weight: 900;
+      text-align: center;
+      transform: translate(-50%, -450%) scale(4);
+      transform-origin: center bottom;
+      box-shadow: 0 2px 4px rgba(15, 34, 54, 0.28);
+      pointer-events: none;
+    }
+
+    .cooldown-popup::before {
+      content: "Regenerating";
+      display: block;
+      margin: -2px -3px 2px;
+      padding: 2px 3px;
+      border-radius: 2px 2px 0 0;
+      background: #36adb9;
+      color: #fff;
+      font-size: 4px;
+      line-height: 1;
+    }
+
+    .cooldown-popup .time-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      line-height: 1;
+    }
+
+    .cooldown-popup img {
+      width: 3px;
+      height: 3px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .level-up-popup {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      z-index: 95;
+      min-width: 260px;
+      padding: 14px 16px 16px;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      border-radius: 8px;
+      background: rgba(36, 36, 58, 0.94);
+      color: #fff;
+      text-align: center;
+      transform: translate(-50%, -50%) scale(1);
+      box-shadow: 0 18px 34px rgba(15, 34, 54, 0.36);
+      pointer-events: none;
+      animation: level-up-pop 2800ms ease-out forwards;
+    }
+
+    .level-up-popup h2 {
+      margin: 0 0 10px;
+      color: #ff6096;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .level-up-popup p {
+      margin: 6px 0 0;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .level-up-popup .crate-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #ff6096;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .level-up-popup .crate-line img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .instruction-popup {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 120;
+      width: 390px;
+      max-width: calc(100% - 48px);
+      padding: 18px;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      border-radius: 8px;
+      background: rgba(36, 36, 58, 0.96);
+      color: #fff;
+      text-align: center;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 22px 42px rgba(15, 34, 54, 0.42);
+    }
+
+    .instruction-popup h2 {
+      margin: 0 0 14px;
+      color: #ff6096;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .instruction-chain {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 8px 0 14px;
+    }
+
+    .instruction-chain img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .instruction-chain span {
+      color: #ff6096;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .instruction-objective {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .instruction-close {
+      min-width: 88px;
+      height: 32px;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 6px;
+      background: #5cc63b;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: inset 0 -3px 0 rgba(27, 114, 31, 0.28);
+    }
+
+    @keyframes level-up-pop {
+      0% {
+        transform: translate(-50%, -44%) scale(0.84);
+        opacity: 0;
+      }
+      12%, 78% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -56%) scale(0.96);
+        opacity: 0;
+      }
+    }
+
+    .reward-inventory-counter {
+      position: absolute;
+      right: 24px;
+      top: 24px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .reward-inventory-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 82px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 8px 18px rgba(15, 34, 54, 0.28);
+    }
+
+    .reward-inventory-item img {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .order-panel {
+      position: absolute;
+      left: 22px;
+      bottom: 22px;
+      z-index: 20;
+      width: 230px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(36, 36, 58, 0.82);
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(15, 34, 54, 0.28);
+    }
+
+    .order-title {
+      color: #ff6096;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .order-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .order-row img {
+      width: 30px;
+      height: 30px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .order-text {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .order-reward {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 10px;
+      color: #ff6096;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .order-reward img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .order-complete {
+      width: 100%;
+      height: 30px;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 6px;
+      background: #5cc63b;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: inset 0 -3px 0 rgba(27, 114, 31, 0.28);
+    }
+
+    .order-complete:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      filter: grayscale(0.2);
+    }
+
+    .space-warning {
+      position: absolute;
+      left: 50%;
+      top: 22%;
+      z-index: 130;
+      color: #ff1f3d;
+      font-size: 34px;
+      font-weight: 1000;
+      line-height: 1;
+      text-align: center;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      text-shadow:
+        -2px -2px 0 #fff,
+        2px -2px 0 #fff,
+        -2px 2px 0 #fff,
+        2px 2px 0 #fff,
+        0 6px 12px rgba(15, 34, 54, 0.35);
+      animation: space-warning-pop 1500ms ease-out forwards;
+    }
+
+    @keyframes space-warning-pop {
+      0% {
+        transform: translate(-50%, -36%) scale(0.86);
+        opacity: 0;
+      }
+      14%, 76% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -64%) scale(0.96);
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 1600px) {
+      .viewport {
+        width: min(1536px, 96vw);
+        height: min(738px, 54vw);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div id="iso" class="iso-layer" aria-label="10 by 10 isometric grass cube grid"></div>
+    <div class="soft-fade"></div>
+    <button id="xpCounter" class="xp-counter" type="button" aria-label="Player level">
+      <img src="Asset/EXP_Note.png" alt="" />
+      <span id="xpCount">0</span>
+      <span id="xpDetail" class="xp-detail" hidden>0 EXP</span>
+    </button>
+    <button id="resetButton" class="reset-button" type="button">Reset</button>
+    <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
+      <img src="Asset/box.png" alt="" />
+      <span id="spawnerCount" class="spawner-count">60/60</span>
+      <span id="spawnerTimer" class="spawner-timer">5:00</span>
+    </button>
+    <div class="reward-inventory-counter" aria-label="Reward inventory">
+      <div class="reward-inventory-item">
+        <img src="Asset/chr_il/chr_il_17.png" alt="" />
+        <span id="kanadeRewardInventoryCount">0</span>
+      </div>
+      <div class="reward-inventory-item">
+        <img src="Asset/chr_il/chr_il_18.png" alt="" />
+        <span id="mafuyuRewardInventoryCount">0</span>
+      </div>
+      <div class="reward-inventory-item">
+        <img src="Asset/chr_il/chr_il_19.png" alt="" />
+        <span id="enaRewardInventoryCount">0</span>
+      </div>
+      <div class="reward-inventory-item">
+        <img src="Asset/chr_il/chr_il_20.png" alt="" />
+        <span id="mizukiRewardInventoryCount">0</span>
+      </div>
+    </div>
+    <div class="order-panel" aria-label="Current order">
+      <div class="order-title">Order</div>
+      <div class="order-row">
+        <img id="orderIcon" src="Asset/Kanade_1.png" alt="" />
+        <div id="orderText" class="order-text">Loading...</div>
+      </div>
+      <div class="order-reward">
+        <img src="Asset/box.png" alt="" />
+        <span id="orderReward">+0 crates</span>
+      </div>
+      <div class="order-reward">
+        <img src="Asset/EXP_Note.png" alt="" />
+        <span id="orderXpReward">+0 EXP</span>
+      </div>
+      <button id="orderComplete" class="order-complete" type="button">Complete</button>
+    </div>
+  </div>
+
+  <script>
+    const iso = document.getElementById("iso");
+    const viewport = document.querySelector(".viewport");
+    const resetButton = document.getElementById("resetButton");
+    const xpCounter = document.getElementById("xpCounter");
+    const xpCount = document.getElementById("xpCount");
+    const xpDetail = document.getElementById("xpDetail");
+    const spawner = document.getElementById("spawner");
+    const spawnerCount = document.getElementById("spawnerCount");
+    const spawnerTimer = document.getElementById("spawnerTimer");
+    const kanadeRewardInventoryCount = document.getElementById("kanadeRewardInventoryCount");
+    const mafuyuRewardInventoryCount = document.getElementById("mafuyuRewardInventoryCount");
+    const enaRewardInventoryCount = document.getElementById("enaRewardInventoryCount");
+    const mizukiRewardInventoryCount = document.getElementById("mizukiRewardInventoryCount");
+    const orderIcon = document.getElementById("orderIcon");
+    const orderText = document.getElementById("orderText");
+    const orderReward = document.getElementById("orderReward");
+    const orderXpReward = document.getElementById("orderXpReward");
+    const orderComplete = document.getElementById("orderComplete");
+    const orderPanel = document.querySelector(".order-panel");
+    const styles = getComputedStyle(document.documentElement);
+
+    const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
+    const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
+    const tileImgH = parseFloat(styles.getPropertyValue("--tile-img-h"));
+    const zoom = parseFloat(styles.getPropertyValue("--zoom"));
+
+    const boardShape = [
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX",
+      "XXXX"
+    ];
+    const boardUnlockLevels = [
+      [9, 9, 9, 9],
+      [7, 7, 9, 9],
+      [7, 7, 7, 7],
+      [5, 5, 5, 5],
+      [3, 3, 3, 3],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1],
+      [1, 1, 1, 1]
+    ];
+    const rows = boardShape.length;
+    const cols = boardShape[0].length;
+    const halfTileW = tileW / 2;
+    const halfTileH = tileStepY / 2;
+    const tileCenterX = tileW / 2;
+    const tileCenterY = tileImgH / 2;
+    const itemFootY = 11;
+    const saveKey = "merge-sekai-save-v1";
+    const spawnPadding = 1;
+    const panLimit = 280;
+    let panY = 0;
+    let isPanning = false;
+    let startPointerY = 0;
+    let startPanY = 0;
+    const maxSpawnerItems = 60;
+    const restoreAmount = 5;
+    const restoreDelayMs = 5 * 60 * 1000;
+    const characterSleepDelayMs = 60 * 60 * 1000;
+    const mergeXpTable = {
+      3: {
+        1: 3,
+        2: 9,
+        3: 27
+      },
+      5: {
+        1: 6,
+        2: 27,
+        3: 54
+      }
+    };
+    const levelXpTable = [
+      { level: 1, xp: 0 },
+      { level: 2, xp: 30 },
+      { level: 3, xp: 100 },
+      { level: 4, xp: 220 },
+      { level: 5, xp: 400 },
+      { level: 6, xp: 650 },
+      { level: 7, xp: 980 },
+      { level: 8, xp: 1400 },
+      { level: 9, xp: 1950 },
+      { level: 10, xp: 2650 }
+    ];
+    const levelUpSpawnerBonus = 10;
+    let spawnerItems = maxSpawnerItems;
+    let nextRestoreAt = null;
+    let playerLevel = 1;
+    let playerXp = 0;
+    let rewardInventory = 0;
+    let mafuyuRewardInventory = 0;
+    let enaRewardInventory = 0;
+    let mizukiRewardInventory = 0;
+    let activeOrder = null;
+    const characterConfigs = [
+      {
+        id: "kanade",
+        rewardFile: "chr_il/chr_il_17.png",
+        harvestRewardName: "Kanade Reward",
+        finalRewardFile: "Kanade_1.png",
+        finalRewardName: "Kanade 1",
+        finalFile: "Kanade_4.png",
+        finalName: "Kanade 4",
+        sleepFile: "Kanade_4_Sleep.png",
+        unlockLevel: 1
+      },
+      {
+        id: "mafuyu",
+        rewardFile: "chr_il/chr_il_18.png",
+        harvestRewardName: "Mafuyu Reward",
+        finalRewardFile: "Mafuyu_1.png",
+        finalRewardName: "Mafuyu 1",
+        finalFile: "Mafuyu_4.png",
+        finalName: "Mafuyu 4",
+        sleepFile: "Mafuyu_4_Sleep.png",
+        unlockLevel: 2
+      },
+      {
+        id: "ena",
+        rewardFile: "chr_il/chr_il_19.png",
+        harvestRewardName: "Ena Reward",
+        finalRewardFile: "Ena_1.png",
+        finalRewardName: "Ena 1",
+        finalFile: "Ena_4.png",
+        finalName: "Ena 4",
+        sleepFile: "Ena_4_Sleep.png",
+        unlockLevel: 3
+      },
+      {
+        id: "mizuki",
+        rewardFile: "chr_il/chr_il_20.png",
+        harvestRewardName: "Mizuki Reward",
+        finalRewardFile: "Mizuki_1.png",
+        finalRewardName: "Mizuki 1",
+        finalFile: "Mizuki_4.png",
+        finalName: "Mizuki 4",
+        sleepFile: "Mizuki_4_Sleep.png",
+        unlockLevel: 4
+      }
+    ];
+    const spawnTable = [
+      { file: "Kanade_1.png", name: "Kanade 1", chance: 90, unlockLevel: 1 },
+      { file: "Kanade_2.png", name: "Kanade 2", chance: 9, unlockLevel: 1 },
+      { file: "Kanade_3.png", name: "Kanade 3", chance: 1, unlockLevel: 1 },
+      { file: "Mafuyu_1.png", name: "Mafuyu 1", chance: 90, unlockLevel: 2 },
+      { file: "Mafuyu_2.png", name: "Mafuyu 2", chance: 9, unlockLevel: 2 },
+      { file: "Mafuyu_3.png", name: "Mafuyu 3", chance: 1, unlockLevel: 2 },
+      { file: "Ena_1.png", name: "Ena 1", chance: 90, unlockLevel: 3 },
+      { file: "Ena_2.png", name: "Ena 2", chance: 9, unlockLevel: 3 },
+      { file: "Ena_3.png", name: "Ena 3", chance: 1, unlockLevel: 3 },
+      { file: "Mizuki_1.png", name: "Mizuki 1", chance: 90, unlockLevel: 4 },
+      { file: "Mizuki_2.png", name: "Mizuki 2", chance: 9, unlockLevel: 4 },
+      { file: "Mizuki_3.png", name: "Mizuki 3", chance: 1, unlockLevel: 4 }
+    ];
+    const mergeChain = {
+      "Kanade_1.png": { file: "Kanade_2.png", name: "Kanade 2" },
+      "Kanade_2.png": { file: "Kanade_3.png", name: "Kanade 3" },
+      "Kanade_3.png": { file: "Kanade_4.png", name: "Kanade 4" },
+      "Mafuyu_1.png": { file: "Mafuyu_2.png", name: "Mafuyu 2" },
+      "Mafuyu_2.png": { file: "Mafuyu_3.png", name: "Mafuyu 3" },
+      "Mafuyu_3.png": { file: "Mafuyu_4.png", name: "Mafuyu 4" },
+      "Ena_1.png": { file: "Ena_2.png", name: "Ena 2" },
+      "Ena_2.png": { file: "Ena_3.png", name: "Ena 3" },
+      "Ena_3.png": { file: "Ena_4.png", name: "Ena 4" },
+      "Mizuki_1.png": { file: "Mizuki_2.png", name: "Mizuki 2" },
+      "Mizuki_2.png": { file: "Mizuki_3.png", name: "Mizuki 3" },
+      "Mizuki_3.png": { file: "Mizuki_4.png", name: "Mizuki 4" },
+      "Coin_1.png": { file: "Coin_2.png", name: "Coin 3" },
+      "Coin_2.png": { file: "Coin_3.png", name: "Coin 9" },
+      "Coin_3.png": { file: "Coin_4.png", name: "Coin 27" },
+      "Coin_4.png": { file: "Coin_5.png", name: "Coin 81" },
+      "Coin_5.png": { file: "Coin_6.png", name: "Coin 243" }
+    };
+    const spawnedObjects = [];
+    let nextObjectId = 1;
+    let draggedObject = null;
+    let dragGhost = null;
+    let dragStartClientX = 0;
+    let dragStartClientY = 0;
+    let didDragMove = false;
+    let tilePlacementPoints = [];
+    let mergePreviewIds = new Set();
+    let mergeCountPopup = null;
+    let cooldownPopupTimeout = null;
+    let lastOriginX = 0;
+    let lastOriginY = 0;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function updateTransform() {
+      iso.style.transform = `translateY(${panY}px) scale(${zoom})`;
+    }
+
+    function updateSpawnerCount() {
+      spawnerCount.textContent = `${spawnerItems}/${maxSpawnerItems}`;
+      spawner.classList.toggle("is-empty", spawnerItems === 0);
+      spawner.disabled = spawnerItems === 0;
+      spawnerTimer.hidden = spawnerItems >= maxSpawnerItems;
+    }
+
+    function saveGame() {
+      const save = {
+        version: 1,
+        spawnerItems,
+        nextRestoreAt,
+        nextObjectId,
+        panY,
+        playerLevel,
+        playerXp,
+        rewardInventory,
+        mafuyuRewardInventory,
+        enaRewardInventory,
+        mizukiRewardInventory,
+        activeOrder,
+        spawnedObjects
+      };
+
+      localStorage.setItem(saveKey, JSON.stringify(save));
+    }
+
+    function loadGame() {
+      const rawSave = localStorage.getItem(saveKey);
+      if (!rawSave) return;
+
+      try {
+        const save = JSON.parse(rawSave);
+        spawnerItems = Number.isFinite(save.spawnerItems)
+          ? clamp(save.spawnerItems, 0, maxSpawnerItems)
+          : maxSpawnerItems;
+        nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
+        nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
+        panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+        playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
+        playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
+        rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
+        mafuyuRewardInventory = Number.isFinite(save.mafuyuRewardInventory) ? save.mafuyuRewardInventory : 0;
+        enaRewardInventory = Number.isFinite(save.enaRewardInventory) ? save.enaRewardInventory : 0;
+        mizukiRewardInventory = Number.isFinite(save.mizukiRewardInventory) ? save.mizukiRewardInventory : 0;
+        activeOrder = save.activeOrder || null;
+        spawnedObjects.splice(
+          0,
+          spawnedObjects.length,
+          ...(Array.isArray(save.spawnedObjects) ? save.spawnedObjects : [])
+        );
+        nextObjectId = Math.max(
+          nextObjectId,
+          spawnedObjects.reduce((maxId, object) => Math.max(maxId, object.id || 0), 0) + 1
+        );
+      } catch (error) {
+        console.warn("Could not load saved game.", error);
+      }
+    }
+
+    function resetGame() {
+      localStorage.removeItem(saveKey);
+      spawnerItems = maxSpawnerItems;
+      nextRestoreAt = null;
+      nextObjectId = 1;
+      playerLevel = 1;
+      playerXp = 0;
+      rewardInventory = 0;
+      mafuyuRewardInventory = 0;
+      enaRewardInventory = 0;
+      mizukiRewardInventory = 0;
+      activeOrder = null;
+      panY = 0;
+      draggedObject = null;
+      spawnedObjects.splice(0, spawnedObjects.length);
+
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
+
+      updateTransform();
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      updateXpCount();
+      updateRewardInventoryCount();
+      ensureActiveOrder();
+      updateOrderPanel();
+      buildGrid();
+      saveGame();
+      showInstructionPopup();
+    }
+
+    function restoreSpawnerItems() {
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+        updateSpawnerCount();
+        updateSpawnerTimer();
+        saveGame();
+        return;
+      }
+
+      spawnerItems = Math.min(maxSpawnerItems, spawnerItems + restoreAmount);
+      nextRestoreAt = spawnerItems >= maxSpawnerItems ? null : Date.now() + restoreDelayMs;
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      saveGame();
+    }
+
+    function applySpawnerRestoreCatchup() {
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+        return;
+      }
+
+      if (nextRestoreAt === null) {
+        nextRestoreAt = Date.now() + restoreDelayMs;
+        return;
+      }
+
+      const now = Date.now();
+      if (now < nextRestoreAt) return;
+
+      const restoreCycles = Math.floor((now - nextRestoreAt) / restoreDelayMs) + 1;
+      spawnerItems = Math.min(maxSpawnerItems, spawnerItems + restoreCycles * restoreAmount);
+      nextRestoreAt = spawnerItems >= maxSpawnerItems
+        ? null
+        : nextRestoreAt + restoreCycles * restoreDelayMs;
+      saveGame();
+    }
+
+    function updateSpawnerTimer() {
+      if (spawnerItems >= maxSpawnerItems || nextRestoreAt === null) {
+        spawnerTimer.textContent = "5:00";
+        spawnerTimer.hidden = true;
+        return;
+      }
+
+      const remainingMs = Math.max(0, nextRestoreAt - Date.now());
+      const totalSeconds = Math.ceil(remainingMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      spawnerTimer.textContent = `${minutes}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function getLevelForXp(xp) {
+      return levelXpTable.reduce((currentLevel, levelInfo) =>
+        xp >= levelInfo.xp ? levelInfo.level : currentLevel,
+        1
+      );
+    }
+
+    function showLevelUpPopup(newLevel, unlockedCharacters, crateBonus) {
+      const existingPopup = viewport.querySelector(".level-up-popup");
+      if (existingPopup) existingPopup.remove();
+
+      const popup = document.createElement("div");
+      const unlockText = unlockedCharacters.length > 0
+        ? `Unlocked ${unlockedCharacters.join(", ")}`
+        : "New rewards unlocked";
+
+      popup.className = "level-up-popup";
+      popup.innerHTML = `
+        <h2>Level ${newLevel}</h2>
+        <p>${unlockText}</p>
+        <div class="crate-line">
+          <img src="Asset/box.png" alt="" />
+          <span>+${crateBonus} crates</span>
+        </div>
+      `;
+      viewport.appendChild(popup);
+      setTimeout(() => popup.remove(), 2850);
+    }
+
+    function showInstructionPopup() {
+      const existingPopup = viewport.querySelector(".instruction-popup");
+      if (existingPopup) existingPopup.remove();
+
+      const popup = document.createElement("div");
+      popup.className = "instruction-popup";
+      popup.innerHTML = `
+        <h2>How to Play</h2>
+        <div class="instruction-chain" aria-label="Kanade merge chain">
+          <img src="Asset/Kanade_1.png" alt="" />
+          <span>&gt;</span>
+          <img src="Asset/Kanade_2.png" alt="" />
+          <span>&gt;</span>
+          <img src="Asset/Kanade_3.png" alt="" />
+          <span>&gt;</span>
+          <img src="Asset/Kanade_4.png" alt="" />
+        </div>
+        <p class="instruction-objective">Objective: Reach lvl 10</p>
+        <button class="instruction-close" type="button">Start</button>
+      `;
+
+      popup.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      popup.querySelector(".instruction-close").addEventListener("click", (event) => {
+        event.stopPropagation();
+        popup.remove();
+      });
+      viewport.appendChild(popup);
+    }
+
+    function applyLevelUnlocks() {
+      const nextLevel = getLevelForXp(playerXp);
+      if (nextLevel <= playerLevel) return;
+
+      const previousLevel = playerLevel;
+      const gainedLevels = nextLevel - playerLevel;
+      playerLevel = nextLevel;
+      spawnerItems += gainedLevels * levelUpSpawnerBonus;
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+      }
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      normalizeBoardObjects();
+      buildGrid();
+      showLevelUpPopup(
+        nextLevel,
+        characterConfigs
+          .filter((config) => config.unlockLevel > previousLevel && config.unlockLevel <= nextLevel)
+          .map((config) => config.finalName.replace(" 4", "")),
+        gainedLevels * levelUpSpawnerBonus
+      );
+    }
+
+    function getNextLevelXp() {
+      const nextLevelInfo = levelXpTable.find((levelInfo) => levelInfo.level > playerLevel);
+      return nextLevelInfo ? nextLevelInfo.xp : levelXpTable[levelXpTable.length - 1].xp;
+    }
+
+    function updateXpCount() {
+      xpCount.textContent = `Lv ${playerLevel}`;
+      xpDetail.textContent = `${playerXp}/${getNextLevelXp()} EXP`;
+    }
+
+    function updateRewardInventoryCount() {
+      kanadeRewardInventoryCount.textContent = `${rewardInventory}`;
+      mafuyuRewardInventoryCount.textContent = `${mafuyuRewardInventory}`;
+      enaRewardInventoryCount.textContent = `${enaRewardInventory}`;
+      mizukiRewardInventoryCount.textContent = `${mizukiRewardInventory}`;
+      if (activeOrder) updateOrderPanel();
+    }
+
+    function formatDuration(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        return `${hours}H ${minutes}M`;
+      }
+
+      return `${minutes}M ${String(seconds).padStart(2, "0")}S`;
+    }
+
+    function getCharacterConfig(objectOrFile) {
+      const file = typeof objectOrFile === "string" ? objectOrFile : objectOrFile.file;
+      return characterConfigs.find((config) =>
+        file === config.finalFile ||
+        file === config.sleepFile ||
+        file === config.rewardFile ||
+        file === config.finalRewardFile
+      );
+    }
+
+    function isCharacterRewardFile(file) {
+      return characterConfigs.some((config) => config.rewardFile === file);
+    }
+
+    function getRewardInventory(file) {
+      if (file === "chr_il/chr_il_20.png") return mizukiRewardInventory;
+      if (file === "chr_il/chr_il_19.png") return enaRewardInventory;
+      if (file === "chr_il/chr_il_18.png") return mafuyuRewardInventory;
+      return rewardInventory;
+    }
+
+    function setRewardInventory(file, value) {
+      if (file === "chr_il/chr_il_20.png") {
+        mizukiRewardInventory = value;
+      } else if (file === "chr_il/chr_il_19.png") {
+        enaRewardInventory = value;
+      } else if (file === "chr_il/chr_il_18.png") {
+        mafuyuRewardInventory = value;
+      } else {
+        rewardInventory = value;
+      }
+    }
+
+    function getAvailableOrderCount(order) {
+      if (!order) return 0;
+      return getRewardInventory(order.file);
+    }
+
+    function getUnlockedCharacters() {
+      return characterConfigs.filter((config) => config.unlockLevel <= playerLevel);
+    }
+
+    function createNextOrder() {
+      const unlockedCharacters = getUnlockedCharacters();
+      const config = unlockedCharacters[Math.floor(Math.random() * unlockedCharacters.length)] || characterConfigs[0];
+
+      return {
+        type: "reward",
+        file: config.rewardFile,
+        name: `${config.finalName.replace(" 4", "")} reward`,
+        count: 1,
+        rewardCrates: 5,
+        rewardXp: 10
+      };
+    }
+
+    function ensureActiveOrder() {
+      if (!activeOrder || !isCharacterRewardFile(activeOrder.file)) {
+        activeOrder = createNextOrder();
+      }
+    }
+
+    function updateOrderPanel() {
+      ensureActiveOrder();
+      const available = getAvailableOrderCount(activeOrder);
+      orderIcon.src = `Asset/${activeOrder.file}`;
+      orderText.textContent = `${activeOrder.name} ${Math.min(available, activeOrder.count)}/${activeOrder.count}`;
+      orderReward.textContent = `+${activeOrder.rewardCrates} crates`;
+      orderXpReward.textContent = `+${activeOrder.rewardXp || 0} EXP`;
+      orderComplete.disabled = available < activeOrder.count;
+    }
+
+    function removeOrderItems(order) {
+      setRewardInventory(order.file, getRewardInventory(order.file) - order.count);
+      updateRewardInventoryCount();
+    }
+
+    function completeOrder() {
+      ensureActiveOrder();
+      if (getAvailableOrderCount(activeOrder) < activeOrder.count) return;
+
+      removeOrderItems(activeOrder);
+      spawnerItems += activeOrder.rewardCrates;
+      addXp(activeOrder.rewardXp || 0);
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+      }
+      activeOrder = createNextOrder();
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      updateOrderPanel();
+      saveGame();
+      buildGrid();
+    }
+
+    function showSpaceWarning() {
+      const existingWarning = viewport.querySelector(".space-warning");
+      if (existingWarning) existingWarning.remove();
+
+      const warning = document.createElement("div");
+      warning.className = "space-warning";
+      warning.textContent = "Need more empty space!";
+      viewport.appendChild(warning);
+      setTimeout(() => warning.remove(), 1550);
+    }
+
+    function refreshSleepingCharacterItems() {
+      if (spawnedObjects.some((object) => getCharacterConfig(object) && object.file.endsWith("_Sleep.png"))) {
+        buildGrid();
+      }
+    }
+
+    function refreshFinalCharacterRewards() {
+      let changed = false;
+      spawnedObjects.forEach((object) => {
+        const config = getCharacterConfig(object);
+        const hasUncollectedRewards = config && spawnedObjects.some((item) => item.file === config.rewardFile);
+        if (config && object.file === config.sleepFile && object.finalRewardPending && !hasUncollectedRewards) {
+          object.file = config.finalFile;
+          object.name = config.finalName;
+          object.readyAt = null;
+          object.finalRewardPending = false;
+          object.finalRewardReady = true;
+          changed = true;
+        }
+      });
+
+      return changed;
+    }
+
+    function getRandomSpawnItem() {
+      const unlockedSpawnTable = spawnTable.filter((item) => item.unlockLevel <= playerLevel);
+      const totalChance = unlockedSpawnTable.reduce((sum, item) => sum + item.chance, 0);
+      const roll = Math.random() * totalChance;
+      let cursor = 0;
+
+      for (const item of unlockedSpawnTable) {
+        cursor += item.chance;
+        if (roll < cursor) return item;
+      }
+
+      return unlockedSpawnTable[0];
+    }
+
+    function isBoardTile(x, y) {
+      return (
+        x >= 0 &&
+        x < cols &&
+        y >= 0 &&
+        y < rows &&
+        boardShape[y][x] === "X"
+      );
+    }
+
+    function isBoardTileUnlocked(x, y) {
+      return isBoardTile(x, y) && playerLevel >= boardUnlockLevels[y][x];
+    }
+
+    function isPlaceableTile(x, y) {
+      return isBoardTileUnlocked(x, y);
+    }
+
+    function normalizeBoardObjects() {
+      const occupiedTiles = new Set();
+
+      for (let index = spawnedObjects.length - 1; index >= 0; index -= 1) {
+        const object = spawnedObjects[index];
+        const currentTileKey = `${object.x},${object.y}`;
+
+        if (isPlaceableTile(object.x, object.y) && !occupiedTiles.has(currentTileKey)) {
+          occupiedTiles.add(currentTileKey);
+          continue;
+        }
+
+        const emptyTiles = [];
+        for (let y = 0; y < rows; y += 1) {
+          for (let x = 0; x < cols; x += 1) {
+            const tileKey = `${x},${y}`;
+            if (!isPlaceableTile(x, y) || occupiedTiles.has(tileKey)) continue;
+
+            emptyTiles.push({
+              x,
+              y,
+              distance: Math.abs(x - object.x) + Math.abs(y - object.y),
+              visualDistance: Math.hypot(x - object.x, y - object.y)
+            });
+          }
+        }
+
+        if (emptyTiles.length === 0) {
+          spawnedObjects.splice(index, 1);
+          continue;
+        }
+
+        emptyTiles.sort((a, b) =>
+          a.distance - b.distance ||
+          a.visualDistance - b.visualDistance ||
+          a.y - b.y ||
+          a.x - b.x
+        );
+
+        object.x = emptyTiles[0].x;
+        object.y = emptyTiles[0].y;
+        occupiedTiles.add(`${object.x},${object.y}`);
+      }
+    }
+
+    function isBoardTileAvailable(x, y, ignoreId = null) {
+      return (
+        isPlaceableTile(x, y) &&
+        !getObjectAtTile(x, y, ignoreId)
+      );
+    }
+
+    function getRandomEmptyTile() {
+      const emptyTiles = [];
+      const centerX = (cols - 1) / 2;
+      const centerY = (rows - 1) / 2;
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          if (isBoardTileAvailable(x, y)) {
+            emptyTiles.push({
+              x,
+              y,
+              distance: Math.hypot(x - centerX, y - centerY)
+            });
+          }
+        }
+      }
+
+      if (emptyTiles.length === 0) return null;
+
+      emptyTiles.sort((a, b) => a.distance - b.distance);
+      const candidateCount = Math.min(emptyTiles.length, Math.max(4, Math.ceil(emptyTiles.length * 0.28)));
+      const candidate = emptyTiles[Math.floor(Math.random() * candidateCount)];
+      return { x: candidate.x, y: candidate.y };
+    }
+
+    function getNearbyEmptyTile(origin) {
+      const nearbyOffsets = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 },
+        { x: 1, y: 1 },
+        { x: -1, y: -1 },
+        { x: 1, y: -1 },
+        { x: -1, y: 1 }
+      ];
+
+      for (const offset of nearbyOffsets) {
+        const x = origin.x + offset.x;
+        const y = origin.y + offset.y;
+        if (isBoardTileAvailable(x, y)) {
+          return { x, y };
+        }
+      }
+
+      return getRandomEmptyTile();
+    }
+
+    function getNearestEmptyTiles(origin, count) {
+      const emptyTiles = [];
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          if (!isBoardTileAvailable(x, y)) continue;
+
+          emptyTiles.push({
+            x,
+            y,
+            distance: Math.abs(x - origin.x) + Math.abs(y - origin.y),
+            visualDistance: Math.hypot(x - origin.x, y - origin.y)
+          });
+        }
+      }
+
+      emptyTiles.sort((a, b) =>
+        a.distance - b.distance ||
+        a.visualDistance - b.visualDistance ||
+        a.y - b.y ||
+        a.x - b.x
+      );
+
+      return emptyTiles.slice(0, count).map(({ x, y }) => ({ x, y }));
+    }
+
+    function spawnRandomObject() {
+      const tile = getRandomEmptyTile();
+      if (!tile) return false;
+
+      const item = getRandomSpawnItem();
+      spawnedObjects.push({
+        id: nextObjectId,
+        file: item.file,
+        name: item.name,
+        x: tile.x,
+        y: tile.y
+      });
+      nextObjectId += 1;
+      updateOrderPanel();
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function addBoardObject(file, name, x, y) {
+      const object = {
+        id: nextObjectId,
+        file,
+        name,
+        x,
+        y
+      };
+
+      if (characterConfigs.some((config) => config.finalFile === file)) {
+        object.harvests = 0;
+        object.readyAt = null;
+      }
+
+      spawnedObjects.push(object);
+      nextObjectId += 1;
+      updateOrderPanel();
+      return object;
+    }
+
+    function getObjectAtTile(x, y, ignoreId = null) {
+      return spawnedObjects.find((object) =>
+        object.id !== ignoreId && object.x === x && object.y === y
+      );
+    }
+
+    function getOrthogonalNeighbors(object, file, ignoredIds = new Set()) {
+      const orthogonalOffsets = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 }
+      ];
+
+      return orthogonalOffsets
+        .map((offset) => getObjectAtTile(object.x + offset.x, object.y + offset.y))
+        .filter((neighbor) =>
+          neighbor &&
+          neighbor.file === file &&
+          !ignoredIds.has(neighbor.id)
+        );
+    }
+
+    function getOrthogonalCluster(start, file, ignoredIds = new Set()) {
+      const cluster = [];
+      const visited = new Set([...ignoredIds, start.id]);
+      const queue = [start];
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        cluster.push(current);
+
+        getOrthogonalNeighbors(current, file, visited).forEach((neighbor) => {
+          visited.add(neighbor.id);
+          queue.push(neighbor);
+        });
+      }
+
+      return cluster;
+    }
+
+    function getBoardAnchor(object) {
+      const screenX = (object.x - object.y) * halfTileW + lastOriginX;
+      const screenY = (object.x + object.y) * halfTileH + lastOriginY;
+
+      return {
+        x: screenX + tileCenterX,
+        y: screenY + itemFootY
+      };
+    }
+
+    function playMergeAnimation(merging, resultTiles) {
+      if (lastOriginX === 0 && lastOriginY === 0) return;
+
+      const target = getBoardAnchor(resultTiles[0]);
+
+      merging.forEach((object, index) => {
+        const source = getBoardAnchor(object);
+        const flyer = document.createElement("img");
+
+        flyer.className = "merge-flyer";
+        flyer.src = `Asset/${object.file}`;
+        flyer.alt = "";
+        flyer.style.left = `${source.x}px`;
+        flyer.style.top = `${source.y}px`;
+        flyer.style.setProperty("--merge-dx", `${target.x - source.x}px`);
+        flyer.style.setProperty("--merge-dy", `${target.y - source.y}px`);
+        flyer.style.animationDelay = `${index * 40}ms`;
+
+        iso.appendChild(flyer);
+        setTimeout(() => flyer.remove(), 940);
+      });
+
+      setTimeout(() => {
+        resultTiles.slice(0, 2).forEach((tile) => {
+          const anchor = getBoardAnchor(tile);
+          const burst = document.createElement("div");
+
+          burst.className = "merge-burst";
+          burst.style.left = `${anchor.x}px`;
+          burst.style.top = `${anchor.y}px`;
+          iso.appendChild(burst);
+          setTimeout(() => burst.remove(), 900);
+        });
+      }, 440);
+    }
+
+    function getDropMergePlan(dragged, target) {
+      if (!target || dragged.file !== target.file) return null;
+      const result = mergeChain[dragged.file];
+      if (!result) return null;
+
+      const ignoredIds = new Set([dragged.id]);
+      const cluster = getOrthogonalCluster(target, dragged.file, ignoredIds);
+      const isBonusMerge = cluster.length >= 4;
+      const consumedChain = cluster.slice(0, isBonusMerge ? 4 : 2);
+
+      if (consumedChain.length < 2) return null;
+
+      return {
+        result,
+        isBonusMerge,
+        resultCount: isBonusMerge ? 2 : 1,
+        mergeCount: isBonusMerge ? 5 : 3,
+        consumedChain
+      };
+    }
+
+    function clearMergeHoverPreview() {
+      mergePreviewIds.forEach((id) => {
+        const element = iso.querySelector(`.board-item[data-id="${id}"]`);
+        if (element) element.classList.remove("is-merge-preview");
+      });
+      mergePreviewIds.clear();
+      if (mergeCountPopup) {
+        mergeCountPopup.remove();
+        mergeCountPopup = null;
+      }
+    }
+
+    function updateMergeHoverPreview(event) {
+      clearMergeHoverPreview();
+      if (!draggedObject || !didDragMove) return;
+
+      const targetTile = findNearestTile(event.clientX, event.clientY);
+      if (!targetTile) return;
+
+      const dragged = spawnedObjects.find((item) => item.id === draggedObject.id);
+      const target = getObjectAtTile(targetTile.x, targetTile.y, draggedObject.id);
+      const plan = dragged && target ? getDropMergePlan(dragged, target) : null;
+      if (!plan) return;
+
+      plan.consumedChain.forEach((object) => {
+        mergePreviewIds.add(object.id);
+        const element = iso.querySelector(`.board-item[data-id="${object.id}"]`);
+        if (element) element.classList.add("is-merge-preview");
+      });
+
+      const targetAnchor = getBoardAnchor(target);
+      mergeCountPopup = document.createElement("div");
+      mergeCountPopup.className = "merge-count-popup";
+      mergeCountPopup.textContent = `${plan.mergeCount}`;
+      mergeCountPopup.style.left = `${targetAnchor.x}px`;
+      mergeCountPopup.style.top = `${targetAnchor.y}px`;
+      iso.appendChild(mergeCountPopup);
+    }
+
+    function getMergeItemLevel(file) {
+      const match = file.match(/_(\d+)\.png$/);
+      return match ? Number(match[1]) : null;
+    }
+
+    function getMergeXp(file, mergeCount) {
+      const level = getMergeItemLevel(file);
+      return mergeXpTable[mergeCount]?.[level] || 0;
+    }
+
+    function getViewportPointFromBoardAnchor(anchor) {
+      const viewportRect = viewport.getBoundingClientRect();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+
+      return {
+        x: viewportRect.left + viewportW / 2 + (anchor.x - viewportW / 2) * zoom,
+        y: viewportRect.top + viewportH / 2 + (anchor.y - viewportH / 2) * zoom + panY
+      };
+    }
+
+    function playXpNoteFlyer(originTile, index = 0) {
+      if (!originTile) return;
+
+      const source = getViewportPointFromBoardAnchor(getBoardAnchor(originTile));
+      const targetRect = xpCount.parentElement.getBoundingClientRect();
+      const target = {
+        x: targetRect.left + targetRect.width / 2,
+        y: targetRect.top + targetRect.height / 2
+      };
+      const flyer = document.createElement("img");
+
+      flyer.className = "xp-note-flyer";
+      flyer.src = "Asset/EXP_Note.png";
+      flyer.alt = "";
+      flyer.style.setProperty("--xp-start-x", `${source.x}px`);
+      flyer.style.setProperty("--xp-start-y", `${source.y}px`);
+      flyer.style.setProperty("--xp-dx", `${target.x - source.x}px`);
+      flyer.style.setProperty("--xp-dy", `${target.y - source.y}px`);
+      flyer.style.animationDelay = `${index * 85}ms`;
+      document.body.appendChild(flyer);
+      setTimeout(() => flyer.remove(), 760 + index * 85);
+    }
+
+    function playXpNoteFlyers(originTile, count) {
+      for (let index = 0; index < count; index += 1) {
+        playXpNoteFlyer(originTile, index);
+      }
+    }
+
+    function addXp(amount, originTile = null, noteCount = 1) {
+      if (amount <= 0) return;
+      playXpNoteFlyers(originTile, noteCount);
+      playerXp += amount;
+      applyLevelUnlocks();
+      updateXpCount();
+    }
+
+    function resolveDropMerge(dragged, target) {
+      const plan = getDropMergePlan(dragged, target);
+      if (!plan) return false;
+
+      const { result, resultCount, mergeCount, consumedChain } = plan;
+      const merging = [dragged, ...consumedChain];
+      const mergingIds = new Set(merging.map((item) => item.id));
+      const resultTiles = consumedChain.slice(0, resultCount);
+
+      clearMergeHoverPreview();
+      mergingIds.forEach((id) => {
+        const element = iso.querySelector(`.board-item[data-id="${id}"]`);
+        if (element) element.classList.add("is-merge-consumed");
+      });
+
+      playMergeAnimation(merging, resultTiles);
+
+      for (let index = spawnedObjects.length - 1; index >= 0; index -= 1) {
+        if (mergingIds.has(spawnedObjects[index].id)) {
+          spawnedObjects.splice(index, 1);
+        }
+      }
+
+      resultTiles.forEach((tile) => {
+        const resultObject = addBoardObject(result.file, result.name, tile.x, tile.y);
+        resultObject.justMerged = true;
+      });
+      addXp(getMergeXp(dragged.file, mergeCount), resultTiles[0], getMergeItemLevel(dragged.file) || 1);
+      saveGame();
+      return true;
+    }
+
+    function collectCharacterReward(object) {
+      const config = getCharacterConfig(object);
+      if (!config || (object.file !== config.finalFile && object.file !== config.sleepFile)) return false;
+      const index = spawnedObjects.findIndex((item) => item.id === object.id);
+      if (index === -1) return false;
+      const current = spawnedObjects[index];
+
+      if (current.finalRewardReady) {
+        const origin = { x: current.x, y: current.y };
+        spawnedObjects.splice(index, 1);
+        const rewardTiles = getNearestEmptyTiles(origin, 2);
+
+        rewardTiles.forEach((tile) => {
+          const resultObject = addBoardObject(config.finalRewardFile, config.finalRewardName, tile.x, tile.y);
+          resultObject.justMerged = true;
+        });
+
+        saveGame();
+        buildGrid();
+        return true;
+      }
+
+      if (current.file === config.sleepFile && Date.now() < current.readyAt) {
+        return false;
+      }
+
+      const rewardCount = Math.floor(Math.random() * 5) + 1;
+      const rewardTiles = getNearestEmptyTiles(current, rewardCount);
+
+      rewardTiles.forEach((tile) => {
+        addBoardObject(config.rewardFile, config.harvestRewardName, tile.x, tile.y);
+      });
+
+      current.harvests = (current.harvests || 0) + 1;
+      current.file = config.sleepFile;
+      current.name = `${config.finalName} Sleep`;
+      current.readyAt = Date.now() + characterSleepDelayMs;
+      current.finalRewardPending = current.harvests >= 2;
+      refreshFinalCharacterRewards();
+
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function collectBoardRewards(file) {
+      const matchingRewards = spawnedObjects.filter((object) => object.file === file);
+      if (matchingRewards.length === 0) return false;
+
+      for (let index = spawnedObjects.length - 1; index >= 0; index -= 1) {
+        if (spawnedObjects[index].file === file) {
+          spawnedObjects.splice(index, 1);
+        }
+      }
+
+      if (file === "chr_il/chr_il_20.png") {
+        mizukiRewardInventory += matchingRewards.length;
+      } else if (file === "chr_il/chr_il_19.png") {
+        enaRewardInventory += matchingRewards.length;
+      } else if (file === "chr_il/chr_il_18.png") {
+        mafuyuRewardInventory += matchingRewards.length;
+      } else {
+        rewardInventory += matchingRewards.length;
+      }
+      refreshFinalCharacterRewards();
+      updateRewardInventoryCount();
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function showCooldownPopup(object, originX, originY) {
+      const existing = viewport.querySelector(".cooldown-popup");
+      if (existing) existing.remove();
+      if (cooldownPopupTimeout) {
+        clearTimeout(cooldownPopupTimeout);
+      }
+
+      const screenX = (object.x - object.y) * halfTileW + originX;
+      const screenY = (object.x + object.y) * halfTileH + originY;
+      const popup = document.createElement("div");
+      const remaining = object.readyAt - Date.now();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+      const overlayX = viewportW / 2 + (screenX + tileCenterX - viewportW / 2) * zoom;
+      const overlayY = viewportH / 2 + (screenY + itemFootY - viewportH / 2) * zoom + panY;
+
+      popup.className = "cooldown-popup";
+      popup.style.left = `${overlayX}px`;
+      popup.style.top = `${overlayY}px`;
+      popup.innerHTML = `
+        <div class="time-row">
+          <img src="Asset/timer.png" alt="" />
+          <span>${formatDuration(remaining)}</span>
+        </div>
+      `;
+
+      viewport.appendChild(popup);
+      cooldownPopupTimeout = setTimeout(() => popup.remove(), 1800);
+    }
+
+    function findNearestTile(clientX, clientY) {
+      let nearest = null;
+      let nearestDistance = Infinity;
+      const maxDistance = tileW * zoom * 0.72;
+      const viewportRect = viewport.getBoundingClientRect();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+
+      tilePlacementPoints.forEach((tile) => {
+        if (!isPlaceableTile(tile.x, tile.y)) return;
+
+        const centerX = viewportRect.left + viewportW / 2 + (tile.placementX - viewportW / 2) * zoom;
+        const centerY = viewportRect.top + viewportH / 2 + (tile.placementY - viewportH / 2) * zoom + panY;
+        const distance = Math.hypot(clientX - centerX, clientY - centerY);
+
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = {
+            x: tile.x,
+            y: tile.y
+          };
+        }
+      });
+
+      if (nearestDistance > maxDistance) return null;
+      return nearest;
+    }
+
+    function isTileOccupied(x, y, ignoreId) {
+      return Boolean(getObjectAtTile(x, y, ignoreId));
+    }
+
+    function findNearestOrthogonalEmptyTile(origin) {
+      const directions = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 }
+      ];
+      const visited = new Set([`${origin.x},${origin.y}`]);
+      const queue = [{ x: origin.x, y: origin.y, distance: 0 }];
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+
+        for (const direction of directions) {
+          const x = current.x + direction.x;
+          const y = current.y + direction.y;
+          const tileKey = `${x},${y}`;
+
+          if (visited.has(tileKey) || !isPlaceableTile(x, y)) continue;
+          if (isBoardTileAvailable(x, y)) return { x, y };
+
+          visited.add(tileKey);
+          queue.push({ x, y, distance: current.distance + 1 });
+        }
+      }
+
+      return null;
+    }
+
+    function moveIntoOccupiedTile(dragged, target) {
+      const draggedOrigin = { x: dragged.x, y: dragged.y };
+      const targetOrigin = { x: target.x, y: target.y };
+      const emptyTile = findNearestOrthogonalEmptyTile(target);
+
+      if (emptyTile) {
+        target.x = emptyTile.x;
+        target.y = emptyTile.y;
+      } else {
+        target.x = draggedOrigin.x;
+        target.y = draggedOrigin.y;
+      }
+
+      dragged.x = targetOrigin.x;
+      dragged.y = targetOrigin.y;
+    }
+
+    function moveDragGhost(clientX, clientY) {
+      if (!dragGhost) return;
+      dragGhost.style.left = `${clientX}px`;
+      dragGhost.style.top = `${clientY}px`;
+    }
+
+    function endObjectDrag(event) {
+      if (!draggedObject) return;
+
+      const movedObject = draggedObject;
+      const targetTile = findNearestTile(event.clientX, event.clientY);
+      const object = spawnedObjects.find((item) => item.id === movedObject.id);
+      let merged = false;
+
+      if (targetTile && object && didDragMove) {
+        const targetObject = getObjectAtTile(targetTile.x, targetTile.y, object.id);
+
+        if (targetObject) {
+          merged = resolveDropMerge(object, targetObject);
+          if (!merged) {
+            moveIntoOccupiedTile(object, targetObject);
+            saveGame();
+          }
+        } else {
+          object.x = targetTile.x;
+          object.y = targetTile.y;
+          saveGame();
+        }
+      }
+
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
+
+      draggedObject = null;
+      if (merged) {
+        setTimeout(buildGrid, 820);
+      } else {
+        buildGrid();
+      }
+
+      const movedConfig = getCharacterConfig(movedObject);
+      if (!didDragMove && movedConfig && (movedObject.file === movedConfig.finalFile || movedObject.file === movedConfig.sleepFile)) {
+        if (movedObject.file === movedConfig.finalFile || isSleepingCharacterReady(movedObject)) {
+          collectCharacterReward(movedObject);
+        } else {
+          showCooldownPopup(movedObject, lastOriginX, lastOriginY);
+        }
+      }
+    }
+
+    function startObjectDrag(event, object) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      draggedObject = object;
+      dragStartClientX = event.clientX;
+      dragStartClientY = event.clientY;
+      didDragMove = false;
+      event.currentTarget.classList.add("is-dragging");
+
+      dragGhost = document.createElement("img");
+      dragGhost.className = "drag-ghost";
+      dragGhost.src = `Asset/${object.file}`;
+      dragGhost.alt = "";
+      document.body.appendChild(dragGhost);
+      moveDragGhost(event.clientX, event.clientY);
+
+      window.addEventListener("pointermove", handleObjectDragMove);
+      window.addEventListener("pointerup", handleObjectDragEnd, { once: true });
+      window.addEventListener("pointercancel", handleObjectDragEnd, { once: true });
+    }
+
+    function handleObjectDragMove(event) {
+      if (!draggedObject) return;
+      if (Math.hypot(event.clientX - dragStartClientX, event.clientY - dragStartClientY) > 4) {
+        didDragMove = true;
+      }
+      moveDragGhost(event.clientX, event.clientY);
+      updateMergeHoverPreview(event);
+    }
+
+    function handleObjectDragEnd(event) {
+      window.removeEventListener("pointermove", handleObjectDragMove);
+      window.removeEventListener("pointerup", handleObjectDragEnd);
+      window.removeEventListener("pointercancel", handleObjectDragEnd);
+      clearMergeHoverPreview();
+      endObjectDrag(event);
+    }
+
+    function isSleepingCharacterReady(object) {
+      const config = getCharacterConfig(object);
+      return Boolean(config && object.file === config.sleepFile && Date.now() >= object.readyAt);
+    }
+
+    function isCollectibleCharacter(object) {
+      const config = getCharacterConfig(object);
+      return Boolean(config && (object.finalRewardReady || object.file === config.finalFile || isSleepingCharacterReady(object)));
+    }
+
+    function renderSpawnedObjects(originX, originY) {
+      spawnedObjects.forEach((object) => {
+        const screenX = (object.x - object.y) * halfTileW + originX;
+        const screenY = (object.x + object.y) * halfTileH + originY;
+        const wrapper = document.createElement("div");
+        const img = document.createElement("img");
+
+        wrapper.className = "board-item";
+        wrapper.dataset.id = `${object.id}`;
+        const characterConfig = getCharacterConfig(object);
+        wrapper.classList.toggle("is-collectible", isCollectibleCharacter(object));
+        wrapper.classList.toggle("is-merge-result", object.justMerged === true);
+        wrapper.classList.toggle(
+          "is-sleeping",
+          characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)
+        );
+        wrapper.style.left = `${screenX + tileCenterX}px`;
+        wrapper.style.top = `${screenY + itemFootY}px`;
+        wrapper.style.zIndex = `${object.x + object.y + 100}`;
+
+        img.className = "board-object";
+        img.src = `Asset/${object.file}`;
+        img.alt = object.name;
+        img.dataset.id = `${object.id}`;
+        img.dataset.x = `${object.x}`;
+        img.dataset.y = `${object.y}`;
+
+        wrapper.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (isCharacterRewardFile(object.file)) {
+            collectBoardRewards(object.file);
+            return;
+          }
+          if (characterConfig && (object.file === characterConfig.finalFile || object.file === characterConfig.sleepFile)) return;
+        });
+        wrapper.addEventListener("pointerdown", (event) => {
+          if (isCharacterRewardFile(object.file)) {
+            event.preventDefault();
+            event.stopPropagation();
+            collectBoardRewards(object.file);
+            return;
+          }
+          startObjectDrag(event, object);
+        });
+
+        wrapper.appendChild(img);
+
+        if (characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)) {
+          const timer = document.createElement("img");
+          timer.className = "timer-overlay";
+          timer.src = "Asset/timer.png";
+          timer.alt = "";
+          wrapper.appendChild(timer);
+        }
+
+        if (isCollectibleCharacter(object)) {
+          const reward = document.createElement("div");
+          const rewardIcon = document.createElement("img");
+          reward.className = "character-reward-popup";
+          rewardIcon.src = `Asset/${object.finalRewardReady ? characterConfig.finalRewardFile : characterConfig.rewardFile}`;
+          rewardIcon.alt = "";
+          reward.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            collectCharacterReward(object);
+          });
+          reward.appendChild(rewardIcon);
+          wrapper.appendChild(reward);
+        }
+
+        iso.appendChild(wrapper);
+        if (object.justMerged === true) {
+          object.justMerged = false;
+        }
+      });
+    }
+
+    function buildGrid() {
+      iso.innerHTML = "";
+      tilePlacementPoints = [];
+
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+      const minX = (0 - (rows - 1)) * halfTileW;
+      const maxX = ((cols - 1) - 0) * halfTileW;
+      const minY = 0;
+      const maxY = ((cols - 1) + (rows - 1)) * halfTileH;
+      const visualMinX = minX;
+      const visualMaxX = maxX + tileW;
+      const visualMinY = minY;
+      const visualMaxY = maxY + tileImgH;
+      const originX = viewportW / 2 - (visualMinX + visualMaxX) / 2;
+      const originY = viewportH / 2 - (visualMinY + visualMaxY) / 2;
+      lastOriginX = originX;
+      lastOriginY = originY;
+
+      updateTransform();
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          if (!isBoardTile(x, y)) continue;
+
+          const screenX = (x - y) * halfTileW + originX;
+          const screenY = (x + y) * halfTileH + originY;
+          const placementX = screenX + tileCenterX;
+          const placementY = screenY + tileCenterY;
+          const tile = document.createElement("div");
+          const isUnlocked = isBoardTileUnlocked(x, y);
+
+          tile.className = "tile";
+          tile.dataset.x = `${x}`;
+          tile.dataset.y = `${y}`;
+          tile.dataset.tile = (x + y) % 2 === 0 ? "black" : "white";
+          tile.style.setProperty(
+            "--cube-image",
+            `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
+          );
+          tile.style.left = `${screenX}px`;
+          tile.style.top = `${screenY}px`;
+          tile.style.zIndex = `${x + y}`;
+          tile.title = isUnlocked
+            ? `Tile ${x + 1}, ${y + 1}`
+            : `Unlocks at Lv ${boardUnlockLevels[y][x]}`;
+          tilePlacementPoints.push({
+            x,
+            y,
+            placementX,
+            placementY
+          });
+
+          iso.appendChild(tile);
+
+          if (!isUnlocked) {
+            const lock = document.createElement("img");
+            lock.className = "tile-lock";
+            lock.src = "Asset/Cloud_Lock.png";
+            lock.alt = "";
+            lock.style.left = `${screenX}px`;
+            lock.style.top = `${screenY}px`;
+            lock.style.zIndex = `${x + y + 60}`;
+            iso.appendChild(lock);
+          }
+        }
+      }
+
+      renderSpawnedObjects(originX, originY);
+    }
+
+    viewport.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      isPanning = true;
+      startPointerY = event.clientY;
+      startPanY = panY;
+      viewport.classList.add("is-panning");
+      viewport.setPointerCapture(event.pointerId);
+    });
+
+    viewport.addEventListener("pointermove", (event) => {
+      if (!isPanning) return;
+      const deltaY = event.clientY - startPointerY;
+      panY = clamp(startPanY + deltaY, -panLimit, panLimit);
+      updateTransform();
+    });
+
+    viewport.addEventListener("pointerup", (event) => {
+      isPanning = false;
+      viewport.classList.remove("is-panning");
+      viewport.releasePointerCapture(event.pointerId);
+      saveGame();
+    });
+
+    viewport.addEventListener("pointercancel", () => {
+      isPanning = false;
+      viewport.classList.remove("is-panning");
+    });
+
+    spawner.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    xpCounter.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    xpCounter.addEventListener("click", (event) => {
+      event.stopPropagation();
+      xpDetail.hidden = !xpDetail.hidden;
+    });
+
+    resetButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    resetButton.addEventListener("click", () => {
+      resetGame();
+    });
+
+    orderPanel.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    orderComplete.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    orderComplete.addEventListener("click", (event) => {
+      event.stopPropagation();
+      completeOrder();
+    });
+
+    spawner.addEventListener("click", () => {
+      if (spawnerItems === 0) return;
+      if (!spawnRandomObject()) {
+        showSpaceWarning();
+        return;
+      }
+      spawnerItems -= 1;
+      if (nextRestoreAt === null) {
+        nextRestoreAt = Date.now() + restoreDelayMs;
+      }
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      saveGame();
+    });
+
+    loadGame();
+    normalizeBoardObjects();
+    refreshFinalCharacterRewards();
+    ensureActiveOrder();
+    applySpawnerRestoreCatchup();
+    buildGrid();
+    updateSpawnerCount();
+    updateSpawnerTimer();
+    updateXpCount();
+    updateRewardInventoryCount();
+    updateOrderPanel();
+    saveGame();
+    setInterval(applySpawnerRestoreCatchup, 1000);
+    setInterval(updateSpawnerTimer, 1000);
+    setInterval(refreshSleepingCharacterItems, 1000);
+    window.addEventListener("resize", buildGrid);
+  </script>
+</body>
+</html>

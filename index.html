@@ -1,0 +1,2090 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Sekai Farm Merge Grid</title>
+  <style>
+    :root {
+      --viewport-w: 1536px;
+      --viewport-h: 738px;
+      --tile-w: 32px;
+      --tile-h: 15px;
+      --tile-img-h: 15px;
+      --zoom: 4;
+      --bg: #444466;
+      --shadow: rgba(15, 34, 54, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .viewport {
+      width: var(--viewport-w);
+      height: var(--viewport-h);
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      background: transparent;
+      box-shadow:
+        0 30px 60px rgba(16, 30, 48, 0.25),
+        inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .viewport.is-panning {
+      cursor: grabbing;
+    }
+
+    .iso-layer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+
+    .tile {
+      position: absolute;
+      width: var(--tile-w);
+      height: var(--tile-img-h);
+      background-image: var(--cube-image);
+      background-size: 100% 100%;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 6px 6px var(--shadow));
+    }
+
+    .tile::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      background: rgba(255, 255, 255, 0.28);
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+      transition: opacity 120ms ease;
+    }
+
+    .tile:hover::after {
+      opacity: 1;
+    }
+
+    .board-object {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+    }
+
+    .board-object.is-dragging {
+      opacity: 0.35;
+      cursor: grabbing;
+    }
+
+    .board-item.is-dragging {
+      opacity: 0.35;
+      cursor: grabbing;
+    }
+
+    .board-item {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      pointer-events: auto;
+      cursor: grab;
+    }
+
+    .board-item .board-object {
+      left: 0;
+      top: 0;
+      transform: none;
+      transform-origin: center center;
+    }
+
+    .board-item.is-collectible {
+      cursor: pointer;
+    }
+
+    .board-item.is-sleeping {
+      cursor: default;
+    }
+
+    .timer-overlay {
+      position: absolute;
+      left: 50%;
+      top: 70%;
+      width: 5px;
+      height: 5px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .board-building {
+      position: absolute;
+      width: 50px;
+      height: 48px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: auto;
+      cursor: grab;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      filter: drop-shadow(0 9px 7px rgba(15, 34, 54, 0.35));
+    }
+
+    .board-building.is-holding {
+      filter:
+        drop-shadow(0 9px 7px rgba(15, 34, 54, 0.35))
+        drop-shadow(0 0 5px rgba(255, 96, 150, 0.75));
+    }
+
+    .board-building.is-dragging {
+      opacity: 0.35;
+      cursor: grabbing;
+    }
+
+    .building-ghost {
+      position: fixed;
+      z-index: 1000;
+      width: 50px;
+      height: 48px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -100%) scale(4);
+      transform-origin: bottom center;
+      filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+    }
+
+    .kanade-reward-popup {
+      position: absolute;
+      left: 50%;
+      top: -2px;
+      width: 20px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      transform: translate(-50%, -100%);
+      filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.35));
+      pointer-events: auto;
+      cursor: pointer;
+      animation: reward-hover 900ms ease-in-out infinite;
+    }
+
+    .kanade-reward-popup::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 0;
+      height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 9px solid rgba(255, 255, 255, 0.96);
+      transform: translateX(-50%);
+    }
+
+    .kanade-reward-popup img {
+      width: 14px;
+      height: 14px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      position: relative;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    @keyframes reward-hover {
+      0%, 100% {
+        transform: translate(-50%, -100%);
+      }
+      50% {
+        transform: translate(-50%, -112%);
+      }
+    }
+
+    .drag-ghost {
+      position: fixed;
+      z-index: 1000;
+      width: 96px;
+      height: 92px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+    }
+
+    .merge-flyer {
+      position: absolute;
+      width: 24px;
+      height: 23px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      pointer-events: none;
+      transform: translate(-50%, -100%);
+      transform-origin: bottom center;
+      z-index: 900;
+      filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      animation: merge-fly 720ms cubic-bezier(0.16, 0.9, 0.25, 1) forwards;
+    }
+
+    .merge-burst {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 901;
+      background: url("Asset/Sparkle.gif") center / contain no-repeat;
+      image-rendering: pixelated;
+      animation: merge-burst 760ms ease-out forwards;
+    }
+
+    .board-item.is-merge-result {
+      animation: merge-result-pop 460ms ease-out both;
+    }
+
+    .board-item.is-merge-consumed {
+      opacity: 0;
+    }
+
+    .board-item.is-merge-preview {
+      animation: merge-preview-pulse 760ms ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(255, 96, 150, 0.85));
+    }
+
+    .merge-count-popup {
+      position: absolute;
+      z-index: 905;
+      min-width: 12px;
+      height: 12px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #ff6096;
+      font-size: 9px;
+      font-weight: 900;
+      line-height: 12px;
+      text-align: center;
+      transform: translate(-50%, -185%);
+      pointer-events: none;
+      box-shadow: 0 3px 7px rgba(15, 34, 54, 0.28);
+    }
+
+    @keyframes merge-fly {
+      0% {
+        transform: translate(-50%, -100%) scale(1);
+        opacity: 1;
+      }
+      70% {
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy) - 5px)) scale(0.82);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy))) scale(0.35);
+        opacity: 0;
+      }
+    }
+
+    @keyframes merge-burst {
+      0% {
+        transform: translate(-50%, -50%) scale(0.72);
+        opacity: 0;
+      }
+      28% {
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1.8);
+        opacity: 0;
+      }
+    }
+
+    @keyframes merge-result-pop {
+      0% {
+        transform: translate(-50%, -100%) scale(0.82);
+        filter: brightness(1.25) drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      }
+      70% {
+        transform: translate(-50%, -100%) scale(1.06);
+      }
+      100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+    }
+
+    @keyframes merge-preview-pulse {
+      0%, 100% {
+        transform: translate(-50%, -100%) scale(1);
+      }
+      50% {
+        transform: translate(-50%, -104%) scale(1.08);
+      }
+    }
+
+    .soft-fade {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(900px 520px at 50% 42%, rgba(255, 255, 255, 0.16), transparent 72%);
+      pointer-events: none;
+    }
+
+    .reset-button {
+      position: absolute;
+      left: 22px;
+      top: 22px;
+      z-index: 20;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+    }
+
+    .reset-button:hover {
+      background: rgba(54, 54, 86, 0.9);
+    }
+
+    .spawner {
+      position: absolute;
+      left: 50%;
+      bottom: 54px;
+      z-index: 20;
+      width: 82px;
+      height: 82px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      transform: translateX(-50%);
+      cursor: pointer;
+      filter: drop-shadow(0 14px 10px rgba(15, 34, 54, 0.38));
+    }
+
+    .spawner-count {
+      position: absolute;
+      left: 50%;
+      bottom: -6px;
+      min-width: 72px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #ff6096;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+      transform: translateX(-50%);
+      box-shadow: 0 4px 10px rgba(15, 34, 54, 0.22);
+      pointer-events: none;
+    }
+
+    .spawner-timer {
+      position: absolute;
+      left: 50%;
+      bottom: -32px;
+      min-width: 86px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(36, 36, 58, 0.72);
+      color: #ff6096;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .spawner.is-empty {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
+
+    .spawner img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      transition: transform 120ms ease;
+    }
+
+    .spawner:hover img {
+      transform: translateY(-4px) scale(1.03);
+    }
+
+    .spawner:active img {
+      transform: translateY(2px) scale(0.96);
+    }
+
+    .cooldown-popup {
+      position: absolute;
+      z-index: 60;
+      min-width: 27px;
+      padding: 2px 3px 3px;
+      border: 2px solid rgba(255, 255, 255, 0.92);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.96);
+      color: #ff6096;
+      font-size: 5px;
+      font-weight: 900;
+      text-align: center;
+      transform: translate(-50%, -450%) scale(4);
+      transform-origin: center bottom;
+      box-shadow: 0 2px 4px rgba(15, 34, 54, 0.28);
+      pointer-events: none;
+    }
+
+    .cooldown-popup::before {
+      content: "Regenerating";
+      display: block;
+      margin: -2px -3px 2px;
+      padding: 2px 3px;
+      border-radius: 2px 2px 0 0;
+      background: #36adb9;
+      color: #fff;
+      font-size: 4px;
+      line-height: 1;
+    }
+
+    .cooldown-popup .time-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      line-height: 1;
+    }
+
+    .cooldown-popup img {
+      width: 3px;
+      height: 3px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .reward-inventory-counter {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 82px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      box-shadow: 0 8px 18px rgba(15, 34, 54, 0.28);
+      pointer-events: none;
+    }
+
+    .reward-inventory-counter img {
+      width: 28px;
+      height: 28px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .building-orders {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 80;
+      width: 394px;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      border-radius: 5px;
+      background: #fff;
+      color: #10363d;
+      transform: translate(-50%, -50%) scale(1.25);
+      transform-origin: center center;
+      box-shadow: 0 18px 34px rgba(15, 34, 54, 0.36);
+      overflow: hidden;
+    }
+
+    .building-orders[hidden] {
+      display: none;
+    }
+
+    .orders-header {
+      position: relative;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #36adb9;
+      color: #fff;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .orders-clipboard {
+      position: absolute;
+      left: 110px;
+      top: -16px;
+      width: 42px;
+      height: 42px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      transform: rotate(-13deg);
+      filter: drop-shadow(0 3px 2px rgba(15, 34, 54, 0.2));
+    }
+
+    .orders-close {
+      position: absolute;
+      right: 6px;
+      top: 5px;
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 999px;
+      background: #ff6096;
+      color: #fff;
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 26px;
+      cursor: pointer;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+    }
+
+    .orders-body {
+      display: grid;
+      grid-template-columns: 144px 1fr;
+      min-height: 114px;
+      background: linear-gradient(90deg, #fff 0 50%, #f7fbfb 50% 100%);
+    }
+
+    .orders-section-title {
+      margin: 6px 0 4px;
+      color: #123b43;
+      font-size: 15px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .orders-character {
+      display: grid;
+      justify-items: center;
+      align-content: start;
+    }
+
+    .orders-character-icon {
+      width: 82px;
+      height: 82px;
+      margin-top: 3px;
+      border-radius: 999px;
+      background: #d7f8fb;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .orders-ingredients {
+      display: grid;
+      align-content: start;
+      justify-items: center;
+    }
+
+    .orders-ingredient-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 3px;
+    }
+
+    .orders-meal-icon {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .orders-equals {
+      color: #123b43;
+      font-size: 26px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .orders-ingredient-icon {
+      width: 58px;
+      height: 58px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .orders-ingredient-count {
+      margin-top: -2px;
+      color: #123b43;
+      font-size: 14px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .orders-footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      height: 42px;
+      padding: 4px 5px 5px 116px;
+      background: #fff0cf;
+    }
+
+    .orders-rewards {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #123b43;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .orders-rewards img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .orders-make {
+      min-width: 74px;
+      height: 34px;
+      border: 0;
+      border-radius: 5px;
+      background: #5cc63b;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: inset 0 -3px 0 rgba(27, 114, 31, 0.28);
+    }
+
+    .orders-make:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      filter: grayscale(0.2);
+    }
+
+    .orders-make.is-crafting {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-width: 86px;
+      background: #f18421;
+      font-size: 13px;
+      box-shadow: inset 0 -3px 0 rgba(145, 70, 10, 0.28);
+      opacity: 1;
+      filter: none;
+    }
+
+    .orders-make.is-crafting img {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .building-craft-timer {
+      position: absolute;
+      z-index: 190;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 28px;
+      padding: 2px 4px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.95);
+      color: #ff6096;
+      font-size: 5px;
+      font-weight: 900;
+      line-height: 1;
+      transform: translate(-50%, -100%);
+      box-shadow: 0 3px 7px rgba(15, 34, 54, 0.3);
+      pointer-events: none;
+    }
+
+    .building-craft-timer img {
+      width: 8px;
+      height: 8px;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    @media (max-width: 1600px) {
+      .viewport {
+        width: min(1536px, 96vw);
+        height: min(738px, 54vw);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div id="iso" class="iso-layer" aria-label="10 by 10 isometric grass cube grid"></div>
+    <div class="soft-fade"></div>
+    <button id="resetButton" class="reset-button" type="button">Reset</button>
+    <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
+      <img src="Asset/box.png" alt="" />
+      <span id="spawnerCount" class="spawner-count">60/60</span>
+      <span id="spawnerTimer" class="spawner-timer">5:00</span>
+    </button>
+    <div id="buildingOrders" class="building-orders" hidden aria-label="Niigo Building orders">
+      <div class="orders-header">
+        <span>Orders</span>
+        <button id="ordersClose" class="orders-close" type="button" aria-label="Close orders">x</button>
+      </div>
+      <div class="orders-body">
+        <div class="orders-character">
+          <div class="orders-section-title">Orders</div>
+          <img class="orders-character-icon" src="Asset/Kanade_Meal_1.png" alt="" />
+        </div>
+        <div class="orders-ingredients">
+          <div class="orders-section-title">Ingredients</div>
+          <div class="orders-ingredient-row">
+            <img class="orders-meal-icon" src="Asset/chr_il/chr_il_17.png" alt="" />
+            <span class="orders-equals">=</span>
+            <img class="orders-ingredient-icon" src="Asset/Kanade_Meal_1.png" alt="" />
+          </div>
+          <div id="ordersIngredientCount" class="orders-ingredient-count">0/3</div>
+        </div>
+      </div>
+      <div class="orders-footer">
+        <div class="orders-rewards">
+          <span>Rewards</span>
+          <img src="Asset/Coin_1.png" alt="" />
+          <img src="Asset/Coin_1.png" alt="" />
+        </div>
+        <button id="ordersMake" class="orders-make" type="button">Make</button>
+      </div>
+    </div>
+    <div class="reward-inventory-counter" aria-label="Reward inventory">
+      <img src="Asset/chr_il/chr_il_17.png" alt="" />
+      <span id="rewardInventoryCount">0</span>
+    </div>
+  </div>
+
+  <script>
+    const iso = document.getElementById("iso");
+    const viewport = document.querySelector(".viewport");
+    const resetButton = document.getElementById("resetButton");
+    const spawner = document.getElementById("spawner");
+    const spawnerCount = document.getElementById("spawnerCount");
+    const spawnerTimer = document.getElementById("spawnerTimer");
+    const rewardInventoryCount = document.getElementById("rewardInventoryCount");
+    const buildingOrders = document.getElementById("buildingOrders");
+    const ordersClose = document.getElementById("ordersClose");
+    const ordersIngredientCount = document.getElementById("ordersIngredientCount");
+    const ordersMake = document.getElementById("ordersMake");
+    const styles = getComputedStyle(document.documentElement);
+
+    const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
+    const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
+    const tileImgH = parseFloat(styles.getPropertyValue("--tile-img-h"));
+    const zoom = parseFloat(styles.getPropertyValue("--zoom"));
+
+    const cols = 10;
+    const rows = 10;
+    const halfTileW = tileW / 2;
+    const halfTileH = tileStepY / 2;
+    const tileCenterX = tileW / 2;
+    const tileCenterY = tileImgH / 2;
+    const itemFootY = 11;
+    const buildingFootY = 18;
+    const saveKey = "merge-sekai-save-v1";
+    const spawnPadding = 1;
+    const panLimit = 280;
+    let panY = 0;
+    let isPanning = false;
+    let startPointerY = 0;
+    let startPanY = 0;
+    const maxSpawnerItems = 60;
+    const restoreAmount = 5;
+    const restoreDelayMs = 5 * 60 * 1000;
+    const kanadeSleepDelayMs = 60 * 60 * 1000;
+    const niigoRecipe = {
+      ingredientFile: "chr_il/chr_il_17.png",
+      ingredientCount: 3,
+      resultFile: "Kanade_Meal_1.png",
+      rewardFile: "Coin_1.png",
+      rewardCount: 2,
+      craftDelayMs: 30 * 1000
+    };
+    let spawnerItems = maxSpawnerItems;
+    let nextRestoreAt = null;
+    let rewardInventory = 0;
+    const spawnTable = [
+      { file: "Kanade_1.png", name: "Kanade 1", chance: 90 },
+      { file: "Kanade_2.png", name: "Kanade 2", chance: 9 },
+      { file: "Kanade_3.png", name: "Kanade 3", chance: 1 }
+    ];
+    const mergeChain = {
+      "Kanade_1.png": { file: "Kanade_2.png", name: "Kanade 2" },
+      "Kanade_2.png": { file: "Kanade_3.png", name: "Kanade 3" },
+      "Kanade_3.png": { file: "Kanade_4.png", name: "Kanade 4" },
+      "Coin_1.png": { file: "Coin_2.png", name: "Coin 3" },
+      "Coin_2.png": { file: "Coin_3.png", name: "Coin 9" },
+      "Coin_3.png": { file: "Coin_4.png", name: "Coin 27" },
+      "Coin_4.png": { file: "Coin_5.png", name: "Coin 81" },
+      "Coin_5.png": { file: "Coin_6.png", name: "Coin 243" }
+    };
+    const buildings = [
+      {
+        file: "Building_Niigo.png",
+        name: "Niigo Building",
+        x: 0,
+        y: 8,
+        width: 2,
+        height: 2,
+        craftReadyAt: null
+      }
+    ];
+    const spawnedObjects = [];
+    let nextObjectId = 1;
+    let draggedObject = null;
+    let dragGhost = null;
+    let dragStartClientX = 0;
+    let dragStartClientY = 0;
+    let didDragMove = false;
+    let tilePlacementPoints = [];
+    let mergePreviewIds = new Set();
+    let mergeCountPopup = null;
+    let cooldownPopupTimeout = null;
+    let lastOriginX = 0;
+    let lastOriginY = 0;
+    let heldBuilding = null;
+    let buildingHoldTimer = null;
+    let buildingGhost = null;
+    let buildingDragActive = false;
+    let buildingHoldStartX = 0;
+    let buildingHoldStartY = 0;
+    let buildingHoldMoved = false;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function updateTransform() {
+      iso.style.transform = `translateY(${panY}px) scale(${zoom})`;
+    }
+
+    function updateSpawnerCount() {
+      spawnerCount.textContent = `${spawnerItems}/${maxSpawnerItems}`;
+      spawner.classList.toggle("is-empty", spawnerItems === 0);
+      spawner.disabled = spawnerItems === 0;
+      spawnerTimer.hidden = spawnerItems >= maxSpawnerItems;
+    }
+
+    function saveGame() {
+      const save = {
+        version: 1,
+        spawnerItems,
+        nextRestoreAt,
+        nextObjectId,
+        panY,
+        rewardInventory,
+        buildings,
+        spawnedObjects
+      };
+
+      localStorage.setItem(saveKey, JSON.stringify(save));
+    }
+
+    function loadGame() {
+      const rawSave = localStorage.getItem(saveKey);
+      if (!rawSave) return;
+
+      try {
+        const save = JSON.parse(rawSave);
+        spawnerItems = Number.isFinite(save.spawnerItems)
+          ? clamp(save.spawnerItems, 0, maxSpawnerItems)
+          : maxSpawnerItems;
+        nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
+        nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
+        panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+        rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
+        if (Array.isArray(save.buildings)) {
+          save.buildings.forEach((savedBuilding) => {
+            const building = buildings.find((item) => item.name === savedBuilding.name);
+            if (building) {
+              building.x = Number.isFinite(savedBuilding.x) ? savedBuilding.x : building.x;
+              building.y = Number.isFinite(savedBuilding.y) ? savedBuilding.y : building.y;
+              building.craftReadyAt = Number.isFinite(savedBuilding.craftReadyAt)
+                ? savedBuilding.craftReadyAt
+                : null;
+            }
+          });
+        }
+
+        spawnedObjects.splice(
+          0,
+          spawnedObjects.length,
+          ...(Array.isArray(save.spawnedObjects) ? save.spawnedObjects : [])
+        );
+        nextObjectId = Math.max(
+          nextObjectId,
+          spawnedObjects.reduce((maxId, object) => Math.max(maxId, object.id || 0), 0) + 1
+        );
+      } catch (error) {
+        console.warn("Could not load saved game.", error);
+      }
+    }
+
+    function resetGame() {
+      localStorage.removeItem(saveKey);
+      spawnerItems = maxSpawnerItems;
+      nextRestoreAt = null;
+      nextObjectId = 1;
+      rewardInventory = 0;
+      panY = 0;
+      draggedObject = null;
+      buildings[0].x = 0;
+      buildings[0].y = 8;
+      buildings[0].craftReadyAt = null;
+      spawnedObjects.splice(0, spawnedObjects.length);
+
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
+
+      if (buildingGhost) {
+        buildingGhost.remove();
+        buildingGhost = null;
+      }
+      clearBuildingHold();
+      buildingDragActive = false;
+      heldBuilding = null;
+
+      updateTransform();
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      updateRewardInventoryCount();
+      closeBuildingOrders();
+      buildGrid();
+      saveGame();
+    }
+
+    function restoreSpawnerItems() {
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+        updateSpawnerCount();
+        updateSpawnerTimer();
+        saveGame();
+        return;
+      }
+
+      spawnerItems = Math.min(maxSpawnerItems, spawnerItems + restoreAmount);
+      nextRestoreAt = spawnerItems >= maxSpawnerItems ? null : Date.now() + restoreDelayMs;
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      saveGame();
+    }
+
+    function applySpawnerRestoreCatchup() {
+      if (spawnerItems >= maxSpawnerItems) {
+        nextRestoreAt = null;
+        return;
+      }
+
+      if (nextRestoreAt === null) {
+        nextRestoreAt = Date.now() + restoreDelayMs;
+        return;
+      }
+
+      const now = Date.now();
+      if (now < nextRestoreAt) return;
+
+      const restoreCycles = Math.floor((now - nextRestoreAt) / restoreDelayMs) + 1;
+      spawnerItems = Math.min(maxSpawnerItems, spawnerItems + restoreCycles * restoreAmount);
+      nextRestoreAt = spawnerItems >= maxSpawnerItems
+        ? null
+        : nextRestoreAt + restoreCycles * restoreDelayMs;
+      saveGame();
+    }
+
+    function updateSpawnerTimer() {
+      if (spawnerItems >= maxSpawnerItems || nextRestoreAt === null) {
+        spawnerTimer.textContent = "5:00";
+        spawnerTimer.hidden = true;
+        return;
+      }
+
+      const remainingMs = Math.max(0, nextRestoreAt - Date.now());
+      const totalSeconds = Math.ceil(remainingMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      spawnerTimer.textContent = `${minutes}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function updateRewardInventoryCount() {
+      rewardInventoryCount.textContent = `${rewardInventory}`;
+      updateBuildingOrders();
+    }
+
+    function getBuildingCraftRemaining(building) {
+      if (!building || !Number.isFinite(building.craftReadyAt)) return 0;
+      return Math.max(0, building.craftReadyAt - Date.now());
+    }
+
+    function isBuildingCrafting(building) {
+      return getBuildingCraftRemaining(building) > 0;
+    }
+
+    function refreshBuildingCraftingState() {
+      let changed = false;
+      let hasCrafting = false;
+
+      buildings.forEach((building) => {
+        if (Number.isFinite(building.craftReadyAt) && building.craftReadyAt <= Date.now()) {
+          building.craftReadyAt = null;
+          changed = true;
+        } else if (isBuildingCrafting(building)) {
+          hasCrafting = true;
+        }
+      });
+
+      if (changed) {
+        saveGame();
+      }
+
+      if ((changed || hasCrafting) && !draggedObject && !buildingDragActive) {
+        buildGrid();
+      }
+
+      updateBuildingOrders();
+    }
+
+    function updateBuildingOrders() {
+      const ingredientAmount = rewardInventory;
+      const building = buildings[0];
+      const remainingMs = getBuildingCraftRemaining(building);
+      const isCrafting = remainingMs > 0;
+
+      ordersIngredientCount.textContent = `${Math.min(ingredientAmount, niigoRecipe.ingredientCount)}/${niigoRecipe.ingredientCount}`;
+      ordersMake.classList.toggle("is-crafting", isCrafting);
+
+      if (isCrafting) {
+        ordersMake.disabled = true;
+        ordersMake.innerHTML = `<img src="Asset/timer.png" alt="" /><span>${formatDuration(remainingMs)}</span>`;
+        return;
+      }
+
+      ordersMake.disabled = ingredientAmount < niigoRecipe.ingredientCount;
+      ordersMake.textContent = "Make";
+    }
+
+    function openBuildingOrders() {
+      updateBuildingOrders();
+      buildingOrders.hidden = false;
+    }
+
+    function closeBuildingOrders() {
+      buildingOrders.hidden = true;
+    }
+
+    function formatDuration(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        return `${hours}H ${minutes}M`;
+      }
+
+      return `${minutes}M ${String(seconds).padStart(2, "0")}S`;
+    }
+
+    function refreshSleepingKanadeItems() {
+      if (spawnedObjects.some((object) => object.file === "Kanade_4_Sleep.png")) {
+        buildGrid();
+      }
+    }
+
+    function getRandomSpawnItem() {
+      const roll = Math.random() * 100;
+      let cursor = 0;
+
+      for (const item of spawnTable) {
+        cursor += item.chance;
+        if (roll < cursor) return item;
+      }
+
+      return spawnTable[0];
+    }
+
+    function isPlaceableTile(x, y) {
+      return (
+        x >= 0 &&
+        x < cols &&
+        y >= 0 &&
+        y < rows
+      );
+    }
+
+    function isBuildingTile(x, y, ignoreBuilding = null) {
+      return buildings.some((building) =>
+        building !== ignoreBuilding &&
+        x >= building.x &&
+        x < building.x + building.width &&
+        y >= building.y &&
+        y < building.y + building.height
+      );
+    }
+
+    function isBoardTileAvailable(x, y, ignoreId = null, ignoreBuilding = null) {
+      return (
+        isPlaceableTile(x, y) &&
+        !isBuildingTile(x, y, ignoreBuilding) &&
+        !getObjectAtTile(x, y, ignoreId)
+      );
+    }
+
+    function isBuildingFootprintAvailable(building, x, y) {
+      for (let offsetY = 0; offsetY < building.height; offsetY += 1) {
+        for (let offsetX = 0; offsetX < building.width; offsetX += 1) {
+          if (!isBoardTileAvailable(x + offsetX, y + offsetY, null, building)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    }
+
+    function getRandomEmptyTile() {
+      const emptyTiles = [];
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          if (isBoardTileAvailable(x, y)) {
+            emptyTiles.push({ x, y });
+          }
+        }
+      }
+
+      if (emptyTiles.length === 0) return null;
+      return emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+    }
+
+    function getNearbyEmptyTile(origin) {
+      const nearbyOffsets = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 },
+        { x: 1, y: 1 },
+        { x: -1, y: -1 },
+        { x: 1, y: -1 },
+        { x: -1, y: 1 }
+      ];
+
+      for (const offset of nearbyOffsets) {
+        const x = origin.x + offset.x;
+        const y = origin.y + offset.y;
+        if (isBoardTileAvailable(x, y)) {
+          return { x, y };
+        }
+      }
+
+      return getRandomEmptyTile();
+    }
+
+    function getNearestEmptyTiles(origin, count) {
+      const emptyTiles = [];
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          if (!isBoardTileAvailable(x, y)) continue;
+
+          emptyTiles.push({
+            x,
+            y,
+            distance: Math.abs(x - origin.x) + Math.abs(y - origin.y),
+            visualDistance: Math.hypot(x - origin.x, y - origin.y)
+          });
+        }
+      }
+
+      emptyTiles.sort((a, b) =>
+        a.distance - b.distance ||
+        a.visualDistance - b.visualDistance ||
+        a.y - b.y ||
+        a.x - b.x
+      );
+
+      return emptyTiles.slice(0, count).map(({ x, y }) => ({ x, y }));
+    }
+
+    function spawnRandomObject() {
+      const tile = getRandomEmptyTile();
+      if (!tile) return false;
+
+      const item = getRandomSpawnItem();
+      spawnedObjects.push({
+        id: nextObjectId,
+        file: item.file,
+        name: item.name,
+        x: tile.x,
+        y: tile.y
+      });
+      nextObjectId += 1;
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function addBoardObject(file, name, x, y) {
+      const object = {
+        id: nextObjectId,
+        file,
+        name,
+        x,
+        y
+      };
+
+      if (file === "Kanade_4.png") {
+        object.harvests = 0;
+        object.readyAt = null;
+      }
+
+      spawnedObjects.push(object);
+      nextObjectId += 1;
+      return object;
+    }
+
+    function getObjectAtTile(x, y, ignoreId = null) {
+      return spawnedObjects.find((object) =>
+        object.id !== ignoreId && object.x === x && object.y === y
+      );
+    }
+
+    function getOrthogonalNeighbors(object, file, ignoredIds = new Set()) {
+      const orthogonalOffsets = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 }
+      ];
+
+      return orthogonalOffsets
+        .map((offset) => getObjectAtTile(object.x + offset.x, object.y + offset.y))
+        .filter((neighbor) =>
+          neighbor &&
+          neighbor.file === file &&
+          !ignoredIds.has(neighbor.id)
+        );
+    }
+
+    function getOrthogonalCluster(start, file, ignoredIds = new Set()) {
+      const cluster = [];
+      const visited = new Set([...ignoredIds, start.id]);
+      const queue = [start];
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        cluster.push(current);
+
+        getOrthogonalNeighbors(current, file, visited).forEach((neighbor) => {
+          visited.add(neighbor.id);
+          queue.push(neighbor);
+        });
+      }
+
+      return cluster;
+    }
+
+    function getBoardAnchor(object) {
+      const screenX = (object.x - object.y) * halfTileW + lastOriginX;
+      const screenY = (object.x + object.y) * halfTileH + lastOriginY;
+
+      return {
+        x: screenX + tileCenterX,
+        y: screenY + itemFootY
+      };
+    }
+
+    function playMergeAnimation(merging, resultTiles) {
+      if (lastOriginX === 0 && lastOriginY === 0) return;
+
+      const target = getBoardAnchor(resultTiles[0]);
+
+      merging.forEach((object, index) => {
+        const source = getBoardAnchor(object);
+        const flyer = document.createElement("img");
+
+        flyer.className = "merge-flyer";
+        flyer.src = `Asset/${object.file}`;
+        flyer.alt = "";
+        flyer.style.left = `${source.x}px`;
+        flyer.style.top = `${source.y}px`;
+        flyer.style.setProperty("--merge-dx", `${target.x - source.x}px`);
+        flyer.style.setProperty("--merge-dy", `${target.y - source.y}px`);
+        flyer.style.animationDelay = `${index * 40}ms`;
+
+        iso.appendChild(flyer);
+        setTimeout(() => flyer.remove(), 940);
+      });
+
+      setTimeout(() => {
+        resultTiles.slice(0, 2).forEach((tile) => {
+          const anchor = getBoardAnchor(tile);
+          const burst = document.createElement("div");
+
+          burst.className = "merge-burst";
+          burst.style.left = `${anchor.x}px`;
+          burst.style.top = `${anchor.y}px`;
+          iso.appendChild(burst);
+          setTimeout(() => burst.remove(), 900);
+        });
+      }, 440);
+    }
+
+    function getDropMergePlan(dragged, target) {
+      if (!target || dragged.file !== target.file) return null;
+      const result = mergeChain[dragged.file];
+      if (!result) return null;
+
+      const ignoredIds = new Set([dragged.id]);
+      const cluster = getOrthogonalCluster(target, dragged.file, ignoredIds);
+      const isBonusMerge = cluster.length >= 4;
+      const consumedChain = cluster.slice(0, isBonusMerge ? 4 : 2);
+
+      if (consumedChain.length < 2) return null;
+
+      return {
+        result,
+        isBonusMerge,
+        resultCount: isBonusMerge ? 2 : 1,
+        mergeCount: isBonusMerge ? 5 : 3,
+        consumedChain
+      };
+    }
+
+    function clearMergeHoverPreview() {
+      mergePreviewIds.forEach((id) => {
+        const element = iso.querySelector(`.board-item[data-id="${id}"]`);
+        if (element) element.classList.remove("is-merge-preview");
+      });
+      mergePreviewIds.clear();
+      if (mergeCountPopup) {
+        mergeCountPopup.remove();
+        mergeCountPopup = null;
+      }
+    }
+
+    function updateMergeHoverPreview(event) {
+      clearMergeHoverPreview();
+      if (!draggedObject || !didDragMove) return;
+
+      const targetTile = findNearestTile(event.clientX, event.clientY);
+      if (!targetTile) return;
+
+      const dragged = spawnedObjects.find((item) => item.id === draggedObject.id);
+      const target = getObjectAtTile(targetTile.x, targetTile.y, draggedObject.id);
+      const plan = dragged && target ? getDropMergePlan(dragged, target) : null;
+      if (!plan) return;
+
+      plan.consumedChain.forEach((object) => {
+        mergePreviewIds.add(object.id);
+        const element = iso.querySelector(`.board-item[data-id="${object.id}"]`);
+        if (element) element.classList.add("is-merge-preview");
+      });
+
+      const targetAnchor = getBoardAnchor(target);
+      mergeCountPopup = document.createElement("div");
+      mergeCountPopup.className = "merge-count-popup";
+      mergeCountPopup.textContent = `${plan.mergeCount}`;
+      mergeCountPopup.style.left = `${targetAnchor.x}px`;
+      mergeCountPopup.style.top = `${targetAnchor.y}px`;
+      iso.appendChild(mergeCountPopup);
+    }
+
+    function resolveDropMerge(dragged, target) {
+      const plan = getDropMergePlan(dragged, target);
+      if (!plan) return false;
+
+      const { result, resultCount, consumedChain } = plan;
+      const merging = [dragged, ...consumedChain];
+      const mergingIds = new Set(merging.map((item) => item.id));
+      const resultTiles = consumedChain.slice(0, resultCount);
+
+      clearMergeHoverPreview();
+      mergingIds.forEach((id) => {
+        const element = iso.querySelector(`.board-item[data-id="${id}"]`);
+        if (element) element.classList.add("is-merge-consumed");
+      });
+
+      playMergeAnimation(merging, resultTiles);
+
+      for (let index = spawnedObjects.length - 1; index >= 0; index -= 1) {
+        if (mergingIds.has(spawnedObjects[index].id)) {
+          spawnedObjects.splice(index, 1);
+        }
+      }
+
+      resultTiles.forEach((tile) => {
+        const resultObject = addBoardObject(result.file, result.name, tile.x, tile.y);
+        resultObject.justMerged = true;
+      });
+      saveGame();
+      return true;
+    }
+
+    function collectKanadeReward(object) {
+      if (object.file !== "Kanade_4.png" && object.file !== "Kanade_4_Sleep.png") return false;
+      const index = spawnedObjects.findIndex((item) => item.id === object.id);
+      if (index === -1) return false;
+      const current = spawnedObjects[index];
+
+      if (current.file === "Kanade_4_Sleep.png" && Date.now() < current.readyAt) {
+        return false;
+      }
+
+      const rewardCount = Math.floor(Math.random() * 5) + 1;
+      const rewardTiles = getNearestEmptyTiles(current, rewardCount);
+
+      rewardTiles.forEach((tile) => {
+        addBoardObject("chr_il/chr_il_17.png", "Kanade Reward", tile.x, tile.y);
+      });
+
+      if (current.harvests === 0) {
+        current.harvests = 1;
+        current.file = "Kanade_4_Sleep.png";
+        current.name = "Kanade 4 Sleep";
+        current.readyAt = Date.now() + kanadeSleepDelayMs;
+      } else {
+        spawnedObjects.splice(index, 1);
+      }
+
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function collectBoardRewards(file) {
+      const matchingRewards = spawnedObjects.filter((object) => object.file === file);
+      if (matchingRewards.length === 0) return false;
+
+      for (let index = spawnedObjects.length - 1; index >= 0; index -= 1) {
+        if (spawnedObjects[index].file === file) {
+          spawnedObjects.splice(index, 1);
+        }
+      }
+
+      rewardInventory += matchingRewards.length;
+      updateRewardInventoryCount();
+      saveGame();
+      buildGrid();
+      return true;
+    }
+
+    function showCooldownPopup(object, originX, originY) {
+      const existing = viewport.querySelector(".cooldown-popup");
+      if (existing) existing.remove();
+      if (cooldownPopupTimeout) {
+        clearTimeout(cooldownPopupTimeout);
+      }
+
+      const screenX = (object.x - object.y) * halfTileW + originX;
+      const screenY = (object.x + object.y) * halfTileH + originY;
+      const popup = document.createElement("div");
+      const remaining = object.readyAt - Date.now();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+      const overlayX = viewportW / 2 + (screenX + tileCenterX - viewportW / 2) * zoom;
+      const overlayY = viewportH / 2 + (screenY + itemFootY - viewportH / 2) * zoom + panY;
+
+      popup.className = "cooldown-popup";
+      popup.style.left = `${overlayX}px`;
+      popup.style.top = `${overlayY}px`;
+      popup.innerHTML = `
+        <div class="time-row">
+          <img src="Asset/timer.png" alt="" />
+          <span>${formatDuration(remaining)}</span>
+        </div>
+      `;
+
+      viewport.appendChild(popup);
+      cooldownPopupTimeout = setTimeout(() => popup.remove(), 1800);
+    }
+
+    function findNearestTile(clientX, clientY) {
+      let nearest = null;
+      let nearestDistance = Infinity;
+      const maxDistance = tileW * zoom * 0.72;
+      const viewportRect = viewport.getBoundingClientRect();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+
+      tilePlacementPoints.forEach((tile) => {
+        if (!isPlaceableTile(tile.x, tile.y) || isBuildingTile(tile.x, tile.y)) return;
+
+        const centerX = viewportRect.left + viewportW / 2 + (tile.placementX - viewportW / 2) * zoom;
+        const centerY = viewportRect.top + viewportH / 2 + (tile.placementY - viewportH / 2) * zoom + panY;
+        const distance = Math.hypot(clientX - centerX, clientY - centerY);
+
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = {
+            x: tile.x,
+            y: tile.y
+          };
+        }
+      });
+
+      if (nearestDistance > maxDistance) return null;
+      return nearest;
+    }
+
+    function findNearestBuildingSpot(building, clientX, clientY) {
+      let nearest = null;
+      let nearestDistance = Infinity;
+      const maxDistance = tileW * zoom * 1.55;
+      const viewportRect = viewport.getBoundingClientRect();
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+
+      for (let y = 0; y <= rows - building.height; y += 1) {
+        for (let x = 0; x <= cols - building.width; x += 1) {
+          if (!isBuildingFootprintAvailable(building, x, y)) continue;
+
+          const anchorX = x + (building.width - 1) / 2;
+          const anchorY = y + (building.height - 1) / 2;
+          const screenX = (anchorX - anchorY) * halfTileW + lastOriginX + tileCenterX;
+          const screenY = (anchorX + anchorY) * halfTileH + lastOriginY + buildingFootY;
+          const centerX = viewportRect.left + viewportW / 2 + (screenX - viewportW / 2) * zoom;
+          const centerY = viewportRect.top + viewportH / 2 + (screenY - viewportH / 2) * zoom + panY;
+          const distance = Math.hypot(clientX - centerX, clientY - centerY);
+
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearest = { x, y };
+          }
+        }
+      }
+
+      if (nearestDistance > maxDistance) return null;
+      return nearest;
+    }
+
+    function isTileOccupied(x, y, ignoreId) {
+      return Boolean(getObjectAtTile(x, y, ignoreId));
+    }
+
+    function moveDragGhost(clientX, clientY) {
+      if (!dragGhost) return;
+      dragGhost.style.left = `${clientX}px`;
+      dragGhost.style.top = `${clientY}px`;
+    }
+
+    function moveBuildingGhost(clientX, clientY) {
+      if (!buildingGhost) return;
+      buildingGhost.style.left = `${clientX}px`;
+      buildingGhost.style.top = `${clientY}px`;
+    }
+
+    function endObjectDrag(event) {
+      if (!draggedObject) return;
+
+      const movedObject = draggedObject;
+      const targetTile = findNearestTile(event.clientX, event.clientY);
+      const object = spawnedObjects.find((item) => item.id === movedObject.id);
+      let merged = false;
+
+      if (targetTile && object && didDragMove) {
+        const targetObject = getObjectAtTile(targetTile.x, targetTile.y, object.id);
+
+        if (targetObject) {
+          merged = resolveDropMerge(object, targetObject);
+        } else {
+          object.x = targetTile.x;
+          object.y = targetTile.y;
+          saveGame();
+        }
+      }
+
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
+
+      draggedObject = null;
+      if (merged) {
+        setTimeout(buildGrid, 820);
+      } else {
+        buildGrid();
+      }
+
+      if (!didDragMove && (movedObject.file === "Kanade_4.png" || movedObject.file === "Kanade_4_Sleep.png")) {
+        if (movedObject.file === "Kanade_4.png" || isSleepingKanadeReady(movedObject)) {
+          collectKanadeReward(movedObject);
+        } else {
+          showCooldownPopup(movedObject, lastOriginX, lastOriginY);
+        }
+      }
+    }
+
+    function startObjectDrag(event, object) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      draggedObject = object;
+      dragStartClientX = event.clientX;
+      dragStartClientY = event.clientY;
+      didDragMove = false;
+      event.currentTarget.classList.add("is-dragging");
+
+      dragGhost = document.createElement("img");
+      dragGhost.className = "drag-ghost";
+      dragGhost.src = `Asset/${object.file}`;
+      dragGhost.alt = "";
+      document.body.appendChild(dragGhost);
+      moveDragGhost(event.clientX, event.clientY);
+
+      window.addEventListener("pointermove", handleObjectDragMove);
+      window.addEventListener("pointerup", handleObjectDragEnd, { once: true });
+      window.addEventListener("pointercancel", handleObjectDragEnd, { once: true });
+    }
+
+    function handleObjectDragMove(event) {
+      if (!draggedObject) return;
+      if (Math.hypot(event.clientX - dragStartClientX, event.clientY - dragStartClientY) > 4) {
+        didDragMove = true;
+      }
+      moveDragGhost(event.clientX, event.clientY);
+      updateMergeHoverPreview(event);
+    }
+
+    function handleObjectDragEnd(event) {
+      window.removeEventListener("pointermove", handleObjectDragMove);
+      window.removeEventListener("pointerup", handleObjectDragEnd);
+      window.removeEventListener("pointercancel", handleObjectDragEnd);
+      clearMergeHoverPreview();
+      endObjectDrag(event);
+    }
+
+    function clearBuildingHold() {
+      if (buildingHoldTimer) {
+        clearTimeout(buildingHoldTimer);
+        buildingHoldTimer = null;
+      }
+
+      if (heldBuilding && heldBuilding.element) {
+        heldBuilding.element.classList.remove("is-holding", "is-dragging");
+      }
+    }
+
+    function activateBuildingDrag() {
+      if (!heldBuilding || buildingDragActive) return;
+
+      buildingDragActive = true;
+      heldBuilding.element.classList.add("is-dragging");
+
+      buildingGhost = document.createElement("img");
+      buildingGhost.className = "building-ghost";
+      buildingGhost.src = `Asset/${heldBuilding.building.file}`;
+      buildingGhost.alt = "";
+      document.body.appendChild(buildingGhost);
+      moveBuildingGhost(buildingHoldStartX, buildingHoldStartY);
+    }
+
+    function startBuildingHold(event, building) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      clearBuildingHold();
+      heldBuilding = {
+        building,
+        element: event.currentTarget
+      };
+      buildingDragActive = false;
+      buildingHoldStartX = event.clientX;
+      buildingHoldStartY = event.clientY;
+      buildingHoldMoved = false;
+      event.currentTarget.classList.add("is-holding");
+
+      buildingHoldTimer = setTimeout(activateBuildingDrag, 5000);
+
+      window.addEventListener("pointermove", handleBuildingHoldMove);
+      window.addEventListener("pointerup", handleBuildingHoldEnd, { once: true });
+      window.addEventListener("pointercancel", handleBuildingHoldEnd, { once: true });
+    }
+
+    function handleBuildingHoldMove(event) {
+      if (!heldBuilding) return;
+
+      if (!buildingDragActive) {
+        const holdDistance = Math.hypot(
+          event.clientX - buildingHoldStartX,
+          event.clientY - buildingHoldStartY
+        );
+
+        if (holdDistance > 8) {
+          buildingHoldMoved = true;
+          handleBuildingHoldEnd(event);
+        }
+        return;
+      }
+
+      moveBuildingGhost(event.clientX, event.clientY);
+    }
+
+    function handleBuildingHoldEnd(event) {
+      window.removeEventListener("pointermove", handleBuildingHoldMove);
+      window.removeEventListener("pointerup", handleBuildingHoldEnd);
+      window.removeEventListener("pointercancel", handleBuildingHoldEnd);
+
+      const activeHold = heldBuilding;
+      clearBuildingHold();
+
+      if (buildingDragActive && activeHold) {
+        const targetSpot = findNearestBuildingSpot(activeHold.building, event.clientX, event.clientY);
+        if (targetSpot) {
+          activeHold.building.x = targetSpot.x;
+          activeHold.building.y = targetSpot.y;
+          saveGame();
+        }
+      } else if (activeHold && !buildingHoldMoved && event.type !== "pointercancel") {
+        openBuildingOrders();
+      }
+
+      if (buildingGhost) {
+        buildingGhost.remove();
+        buildingGhost = null;
+      }
+
+      heldBuilding = null;
+      buildingDragActive = false;
+      buildingHoldMoved = false;
+      buildGrid();
+    }
+
+    function isSleepingKanadeReady(object) {
+      return object.file === "Kanade_4_Sleep.png" && Date.now() >= object.readyAt;
+    }
+
+    function isCollectibleKanade(object) {
+      return object.file === "Kanade_4.png" || isSleepingKanadeReady(object);
+    }
+
+    function renderSpawnedObjects(originX, originY) {
+      spawnedObjects.forEach((object) => {
+        const screenX = (object.x - object.y) * halfTileW + originX;
+        const screenY = (object.x + object.y) * halfTileH + originY;
+        const wrapper = document.createElement("div");
+        const img = document.createElement("img");
+
+        wrapper.className = "board-item";
+        wrapper.dataset.id = `${object.id}`;
+        wrapper.classList.toggle("is-collectible", isCollectibleKanade(object));
+        wrapper.classList.toggle("is-merge-result", object.justMerged === true);
+        wrapper.classList.toggle(
+          "is-sleeping",
+          object.file === "Kanade_4_Sleep.png" && !isSleepingKanadeReady(object)
+        );
+        wrapper.style.left = `${screenX + tileCenterX}px`;
+        wrapper.style.top = `${screenY + itemFootY}px`;
+        wrapper.style.zIndex = `${object.x + object.y + 100}`;
+
+        img.className = "board-object";
+        img.src = `Asset/${object.file}`;
+        img.alt = object.name;
+        img.dataset.id = `${object.id}`;
+        img.dataset.x = `${object.x}`;
+        img.dataset.y = `${object.y}`;
+
+        wrapper.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (object.file === "chr_il/chr_il_17.png") {
+            collectBoardRewards(object.file);
+            return;
+          }
+          if (object.file === "Kanade_4.png" || object.file === "Kanade_4_Sleep.png") return;
+        });
+        wrapper.addEventListener("pointerdown", (event) => {
+          if (object.file === "chr_il/chr_il_17.png") {
+            event.preventDefault();
+            event.stopPropagation();
+            collectBoardRewards(object.file);
+            return;
+          }
+          startObjectDrag(event, object);
+        });
+
+        wrapper.appendChild(img);
+
+        if (object.file === "Kanade_4_Sleep.png" && !isSleepingKanadeReady(object)) {
+          const timer = document.createElement("img");
+          timer.className = "timer-overlay";
+          timer.src = "Asset/timer.png";
+          timer.alt = "";
+          wrapper.appendChild(timer);
+        }
+
+        if (isCollectibleKanade(object)) {
+          const reward = document.createElement("div");
+          const rewardIcon = document.createElement("img");
+          reward.className = "kanade-reward-popup";
+          rewardIcon.src = "Asset/chr_il/chr_il_17.png";
+          rewardIcon.alt = "";
+          reward.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            collectKanadeReward(object);
+          });
+          reward.appendChild(rewardIcon);
+          wrapper.appendChild(reward);
+        }
+
+        iso.appendChild(wrapper);
+        if (object.justMerged === true) {
+          object.justMerged = false;
+        }
+      });
+    }
+
+    function renderBuildings(originX, originY) {
+      buildings.forEach((building) => {
+        const anchorX = building.x + (building.width - 1) / 2;
+        const anchorY = building.y + (building.height - 1) / 2;
+        const screenX = (anchorX - anchorY) * halfTileW + originX;
+        const screenY = (anchorX + anchorY) * halfTileH + originY;
+        const img = document.createElement("img");
+
+        img.className = "board-building";
+        img.src = `Asset/${building.file}`;
+        img.alt = building.name;
+        img.title = "Hold for 5 seconds to move";
+        img.style.left = `${screenX + tileCenterX}px`;
+        img.style.top = `${screenY + buildingFootY}px`;
+        img.style.zIndex = `${Math.round(anchorX + anchorY + 80)}`;
+        img.addEventListener("pointerdown", (event) => {
+          startBuildingHold(event, building);
+        });
+
+        iso.appendChild(img);
+
+        if (isBuildingCrafting(building)) {
+          const timer = document.createElement("div");
+          const timerIcon = document.createElement("img");
+          const timerText = document.createElement("span");
+
+          timer.className = "building-craft-timer";
+          timer.style.left = `${screenX + tileCenterX}px`;
+          timer.style.top = `${screenY + buildingFootY - 52}px`;
+          timer.style.zIndex = `${Math.round(anchorX + anchorY + 190)}`;
+          timerIcon.src = "Asset/timer.png";
+          timerIcon.alt = "";
+          timerText.textContent = formatDuration(getBuildingCraftRemaining(building));
+          timer.appendChild(timerIcon);
+          timer.appendChild(timerText);
+          iso.appendChild(timer);
+        }
+      });
+    }
+
+    function buildGrid() {
+      iso.innerHTML = "";
+      tilePlacementPoints = [];
+
+      const viewportW = viewport.clientWidth;
+      const viewportH = viewport.clientHeight;
+      const minX = (0 - (rows - 1)) * halfTileW;
+      const maxX = ((cols - 1) - 0) * halfTileW;
+      const minY = 0;
+      const maxY = ((cols - 1) + (rows - 1)) * halfTileH;
+      const visualMinX = minX;
+      const visualMaxX = maxX + tileW;
+      const visualMinY = minY;
+      const visualMaxY = maxY + tileImgH;
+      const originX = viewportW / 2 - (visualMinX + visualMaxX) / 2;
+      const originY = viewportH / 2 - (visualMinY + visualMaxY) / 2;
+      lastOriginX = originX;
+      lastOriginY = originY;
+
+      updateTransform();
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          const screenX = (x - y) * halfTileW + originX;
+          const screenY = (x + y) * halfTileH + originY;
+          const placementX = screenX + tileCenterX;
+          const placementY = screenY + tileCenterY;
+          const tile = document.createElement("div");
+
+          tile.className = "tile";
+          tile.dataset.x = `${x}`;
+          tile.dataset.y = `${y}`;
+          tile.dataset.tile = (x + y) % 2 === 0 ? "black" : "white";
+          tile.style.setProperty(
+            "--cube-image",
+            `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
+          );
+          tile.style.left = `${screenX}px`;
+          tile.style.top = `${screenY}px`;
+          tile.style.zIndex = `${x + y}`;
+          tile.title = `Tile ${x + 1}, ${y + 1}`;
+          tilePlacementPoints.push({
+            x,
+            y,
+            placementX,
+            placementY
+          });
+
+          iso.appendChild(tile);
+        }
+      }
+
+      renderBuildings(originX, originY);
+      renderSpawnedObjects(originX, originY);
+    }
+
+    viewport.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      isPanning = true;
+      startPointerY = event.clientY;
+      startPanY = panY;
+      viewport.classList.add("is-panning");
+      viewport.setPointerCapture(event.pointerId);
+    });
+
+    viewport.addEventListener("pointermove", (event) => {
+      if (!isPanning) return;
+      const deltaY = event.clientY - startPointerY;
+      panY = clamp(startPanY + deltaY, -panLimit, panLimit);
+      updateTransform();
+    });
+
+    viewport.addEventListener("pointerup", (event) => {
+      isPanning = false;
+      viewport.classList.remove("is-panning");
+      viewport.releasePointerCapture(event.pointerId);
+      saveGame();
+    });
+
+    viewport.addEventListener("pointercancel", () => {
+      isPanning = false;
+      viewport.classList.remove("is-panning");
+    });
+
+    spawner.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    resetButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    resetButton.addEventListener("click", () => {
+      resetGame();
+    });
+
+    buildingOrders.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    ordersClose.addEventListener("click", () => {
+      closeBuildingOrders();
+    });
+
+    ordersMake.addEventListener("click", () => {
+      const building = buildings[0];
+
+      if (isBuildingCrafting(building)) {
+        updateBuildingOrders();
+        return;
+      }
+
+      if (rewardInventory < niigoRecipe.ingredientCount) {
+        updateBuildingOrders();
+        return;
+      }
+
+      rewardInventory -= niigoRecipe.ingredientCount;
+      building.craftReadyAt = Date.now() + niigoRecipe.craftDelayMs;
+      updateRewardInventoryCount();
+      updateBuildingOrders();
+      saveGame();
+      buildGrid();
+    });
+
+    ordersMake.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    ordersMake.addEventListener("pointerup", (event) => {
+      event.stopPropagation();
+    });
+
+    ordersMake.addEventListener("pointercancel", (event) => {
+      event.stopPropagation();
+    });
+
+    buildingOrders.addEventListener("click", (event) => {
+      event.stopPropagation();
+      updateBuildingOrders();
+    });
+
+    spawner.addEventListener("click", () => {
+      if (spawnerItems === 0) return;
+      if (!spawnRandomObject()) return;
+      spawnerItems -= 1;
+      if (nextRestoreAt === null) {
+        nextRestoreAt = Date.now() + restoreDelayMs;
+      }
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      saveGame();
+    });
+
+    loadGame();
+    applySpawnerRestoreCatchup();
+    buildGrid();
+    updateSpawnerCount();
+    updateSpawnerTimer();
+    updateRewardInventoryCount();
+    saveGame();
+    setInterval(applySpawnerRestoreCatchup, 1000);
+    setInterval(updateSpawnerTimer, 1000);
+    setInterval(refreshSleepingKanadeItems, 1000);
+    setInterval(refreshBuildingCraftingState, 1000);
+    window.addEventListener("resize", buildGrid);
+  </script>
+</body>
+</html>

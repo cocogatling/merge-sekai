@@ -1,0 +1,701 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Isometric Farm Viewport</title>
+  <style>
+    :root {
+      --viewport-w: 1536px;
+      --viewport-h: 738px;
+      --tile-w: 32px;
+      --tile-h: 16px;
+      --tile-img-h: 30px;
+      --crop-frame-w: 32px;
+      --crop-frame-h: 30px;
+      --crop-scale: 1;
+      --crop-anchor-x: 16px;
+      --crop-anchor-y: 23px;
+      --bean-frame-w: 32px;
+      --bean-frame-h: 30px;
+      --bean-anchor-x: 16px;
+      --bean-anchor-y: 23px;
+      --kiss-frame-w: 64px;
+      --kiss-frame-h: 30px;
+      --kiss-frames: 6;
+      --bg-1: #444466;
+      --shadow: rgba(15, 34, 54, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg-1);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      gap: 10px;
+      z-index: 2;
+    }
+
+    .inventory {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.18);
+      color: #f5f6ff;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      z-index: 2;
+      backdrop-filter: blur(6px);
+    }
+
+    .inventory img {
+      width: 24px;
+      height: 24px;
+      image-rendering: pixelated;
+    }
+
+    .controls button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 10px;
+      background: #f0f2ff;
+      color: #23233a;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+    }
+
+    .controls button.active {
+      background: #ffd87a;
+      color: #3b2a10;
+    }
+
+    .viewport {
+      width: var(--viewport-w);
+      height: var(--viewport-h);
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      background: transparent;
+      box-shadow:
+        0 30px 60px rgba(16, 30, 48, 0.25),
+        inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+    }
+
+    .iso-layer {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+
+    .tile {
+      position: absolute;
+      width: var(--tile-w);
+      height: var(--tile-img-h);
+      background-image: url("Snow Cube.png");
+      background-size: 100% 100%;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 6px 6px var(--shadow));
+      transition: transform 0.3s ease;
+    }
+
+    .tile:hover {
+      transform: translateY(-6px) scale(1.02);
+    }
+
+    .crop {
+      position: absolute;
+      left: var(--crop-anchor-x);
+      top: var(--crop-anchor-y);
+      width: var(--crop-frame-w);
+      height: var(--crop-frame-h);
+      background-image: url("Blueberry Sheet 4.png");
+      background-size: calc(var(--crop-frame-w) * 6) var(--crop-frame-h);
+      image-rendering: pixelated;
+      transform: translate(-50%, -100%) scale(var(--crop-scale));
+      transform-origin: bottom center;
+      pointer-events: none;
+    }
+
+    .character {
+      position: absolute;
+      left: var(--bean-anchor-x);
+      top: var(--bean-anchor-y);
+      width: var(--bean-frame-w);
+      height: var(--bean-frame-h);
+      background-size: calc(var(--bean-frame-w) * 2) var(--bean-frame-h);
+      image-rendering: pixelated;
+      --bean-face: 1;
+      transform: translate(-50%, -100%) scaleX(var(--bean-face));
+      transform-origin: bottom center;
+      pointer-events: none;
+    }
+
+    .character.bean {
+      background-image: url("Bean Walk.png");
+    }
+
+    .character.mfyean {
+      background-image: url("Mfyean Walk.png");
+    }
+
+    .character.bean.idle {
+      background-image: url("Bean Idle 2.png");
+      background-size: calc(var(--bean-frame-w) * 8) var(--bean-frame-h);
+    }
+
+    .character.mfyean.idle {
+      background-image: url("Mfyean Idle 2.png");
+      background-size: calc(var(--bean-frame-w) * 8) var(--bean-frame-h);
+    }
+
+    .character.hidden {
+      opacity: 0;
+    }
+
+    .kiss {
+      position: absolute;
+      width: var(--kiss-frame-w);
+      height: var(--kiss-frame-h);
+      background-image: url("Kiss.png");
+      background-size: calc(var(--kiss-frame-w) * var(--kiss-frames)) var(--kiss-frame-h);
+      image-rendering: pixelated;
+      --kiss-face: 1;
+      transform: translate(-50%, -100%) scaleX(var(--kiss-face));
+      transform-origin: bottom center;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .kiss.active {
+      opacity: 1;
+    }
+
+    .character.pop {
+      animation: bean-pop 0.25s ease-out forwards;
+    }
+
+    @keyframes bean-pop {
+      0% { transform: translate(-50%, -100%) scaleX(var(--bean-face)) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -140%) scaleX(var(--bean-face)) scale(1.6); opacity: 0; }
+    }
+
+    .soft-fade {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(800px 500px at 50% 35%, rgba(255,255,255,0.18), transparent 70%);
+      pointer-events: none;
+    }
+
+    @media (max-width: 1600px) {
+      .viewport {
+        width: min(1536px, 96vw);
+        height: min(738px, 54vw);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <div class="controls"></div>
+    <div class="inventory">
+      <img src="Blueberry Fruit.png" alt="Blueberry fruit" />
+      <span id="berryCount">0</span>
+    </div>
+    <div id="iso" class="iso-layer"></div>
+    <div class="soft-fade"></div>
+  </div>
+
+  <script>
+    const iso = document.getElementById("iso");
+    const viewport = document.querySelector(".viewport");
+
+    const styles = getComputedStyle(document.documentElement);
+    const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
+    const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
+    const tileImgH = parseFloat(styles.getPropertyValue("--tile-img-h"));
+    const berryCount = document.getElementById("berryCount");
+
+    const cols = 5;
+    const rows = 5;
+
+    const viewportW = viewport.clientWidth;
+    const viewportH = viewport.clientHeight;
+    const halfTileW = tileW / 2;
+    const halfTileH = tileStepY / 2;
+    const minX = (0 - (rows - 1)) * halfTileW;
+    const maxX = ((cols - 1) - 0) * halfTileW;
+    const minY = (0 + 0) * halfTileH;
+    const maxY = ((cols - 1) + (rows - 1)) * halfTileH;
+    const visualMinX = minX;
+    const visualMaxX = maxX + tileW;
+    const visualMinY = minY;
+    const visualMaxY = maxY + tileImgH;
+    const originX = viewportW / 2 - (visualMinX + visualMaxX) / 2;
+    const originY = viewportH / 2 - (visualMinY + visualMaxY) / 2;
+    let zoom = 6;
+    let panX = 0;
+    let panY = 0;
+    let berries = 0;
+
+    const cropIntervals = new WeakMap();
+    const cropStages = 6;
+    const cropDurationMs = 60000;
+    const cropStepMs = cropDurationMs / cropStages;
+    const cropFrameW = parseFloat(styles.getPropertyValue("--crop-frame-w"));
+    const beanFrameW = parseFloat(styles.getPropertyValue("--bean-frame-w"));
+    const beanAnchorX = parseFloat(styles.getPropertyValue("--bean-anchor-x"));
+    const beanAnchorY = parseFloat(styles.getPropertyValue("--bean-anchor-y"));
+    const kissFrameW = parseFloat(styles.getPropertyValue("--kiss-frame-w"));
+    const kissFrames = parseInt(styles.getPropertyValue("--kiss-frames"), 10);
+    const tiles = [];
+    const tileCenters = [];
+
+    const updateTransform = () => {
+      iso.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    };
+
+    updateTransform();
+
+    for (let y = 0; y < rows; y += 1) {
+      const row = [];
+      const centerRow = [];
+      for (let x = 0; x < cols; x += 1) {
+        const screenX = (x - y) * halfTileW + originX;
+        const screenY = (x + y) * halfTileH + originY;
+
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        const isPlot =
+          x >= 1 && x <= 3 &&
+          y >= 1 && y <= 3;
+        tile.dataset.type = isPlot ? "plot" : "snow";
+        if (isPlot) {
+          tile.style.backgroundImage = "url(\"Plot Cube.png\")";
+        }
+        tile.dataset.x = `${x}`;
+        tile.dataset.y = `${y}`;
+        tile.style.left = `${screenX}px`;
+        tile.style.top = `${screenY}px`;
+        tile.addEventListener("click", () => {
+          if (tile.dataset.type !== "plot") return;
+          if (!tile.dataset.crop) {
+            tile.dataset.crop = "blueberry";
+            tile.dataset.cropWatered = "false";
+            const crop = document.createElement("div");
+            crop.className = "crop";
+            crop.style.backgroundPosition = "0px 0px";
+            tile.appendChild(crop);
+            return;
+          }
+
+          if (tile.dataset.crop === "blueberry" && tile.dataset.cropWatered !== "true") {
+            tile.dataset.cropWatered = "true";
+            tile.style.backgroundImage = "url(\"Plot Cube Watered.png\")";
+            const crop = tile.querySelector(".crop");
+            let stage = 0;
+            const interval = setInterval(() => {
+              stage += 1;
+              if (stage >= cropStages) {
+                clearInterval(interval);
+                cropIntervals.delete(tile);
+                tile.dataset.cropReady = "true";
+                return;
+              }
+              if (crop) {
+                crop.style.backgroundPosition = `-${stage * cropFrameW}px 0px`;
+              }
+            }, cropStepMs);
+
+            cropIntervals.set(tile, interval);
+          }
+        });
+        tile.addEventListener("click", () => {
+          if (tile.dataset.crop !== "blueberry") return;
+          if (tile.dataset.cropReady !== "true") return;
+          const crop = tile.querySelector(".crop");
+          if (crop) crop.remove();
+          tile.dataset.crop = "";
+          tile.dataset.cropReady = "";
+          tile.dataset.cropWatered = "";
+          tile.style.backgroundImage = "url(\"Plot Cube.png\")";
+          berries += 1;
+          berryCount.textContent = `${berries}`;
+        });
+        row.push(tile);
+        centerRow.push({
+          x: screenX + beanAnchorX,
+          y: screenY + beanAnchorY,
+        });
+        iso.appendChild(tile);
+      }
+      tiles.push(row);
+      tileCenters.push(centerRow);
+    }
+
+    const moveSpeed = 0.2;
+
+    const pickNextTarget = (current) => {
+      const x = current.x;
+      const y = current.y;
+      const neighbors = [
+        { x: x + 1, y },
+        { x: x - 1, y },
+        { x, y: y + 1 },
+        { x, y: y - 1 },
+      ].filter(
+        (pos) => pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows
+      );
+      const snowNeighbors = neighbors.filter(
+        (pos) => tiles[pos.y][pos.x].dataset.type === "snow"
+      );
+      if (snowNeighbors.length === 0) return null;
+      return snowNeighbors[Math.floor(Math.random() * snowNeighbors.length)];
+    };
+
+    const findNearestSnowByPosition = (pos) => {
+      let best = null;
+      let bestDist = Infinity;
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          const tile = tiles[y][x];
+          if (tile.dataset.type !== "snow") continue;
+          const center = tileCenters[y][x];
+          const dx = center.x - pos.x;
+          const dy = center.y - pos.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = { x, y };
+          }
+        }
+      }
+      return best;
+    };
+
+    const createWalker = (options) => {
+      const { className, startX, startY, offsetX = 0, offsetY = 0 } = options;
+      const walker = document.createElement("div");
+      walker.className = `character ${className}`;
+      walker.style.backgroundPosition = "0px 0px";
+      iso.appendChild(walker);
+
+      let frame = 0;
+      let idleFrame = 0;
+      let isPopping = false;
+      let current = { x: startX, y: startY };
+      let target = null;
+      let pos = { ...tileCenters[startY][startX] };
+      pos.x += offsetX;
+      pos.y += offsetY;
+      let lastFrameSwitch = performance.now();
+      let state = "walk";
+      let stateUntil = performance.now();
+      let lastIdleSwitch = performance.now();
+
+      const setPosition = (nextPos) => {
+        walker.style.left = `${nextPos.x}px`;
+        walker.style.top = `${nextPos.y}px`;
+      };
+
+      const scheduleState = (nextState, now) => {
+        state = nextState;
+        const duration =
+          nextState === "idle"
+            ? 5000 + Math.random() * 5000
+            : 1500 + Math.random() * 3500;
+        stateUntil = now + duration;
+        if (nextState === "idle") {
+          target = null;
+          walker.classList.add("idle");
+          walker.style.backgroundPosition = "0px 0px";
+          idleFrame = 0;
+          lastIdleSwitch = now;
+        } else {
+          walker.classList.remove("idle");
+        }
+      };
+
+      scheduleState("walk", performance.now());
+      setPosition(pos);
+
+      const popAndRespawn = () => {
+        if (isPopping) return;
+        isPopping = true;
+        walker.classList.add("pop");
+        target = null;
+        setTimeout(() => {
+          walker.classList.remove("pop");
+          const nearest = findNearestSnowByPosition(pos) || { x: 0, y: 0 };
+          current = nearest;
+          pos = { ...tileCenters[nearest.y][nearest.x] };
+          setPosition(pos);
+          isPopping = false;
+        }, 250);
+      };
+
+      const step = (time) => {
+        if (isPopping) {
+          requestAnimationFrame(step);
+          return;
+        }
+
+        if (walker.dataset.frozen === "true") {
+          requestAnimationFrame(step);
+          return;
+        }
+
+        if (time >= stateUntil) {
+          scheduleState(state === "walk" ? "idle" : "walk", time);
+        }
+
+        const currentTile = tiles[current.y][current.x];
+        if (currentTile.dataset.type !== "snow") {
+          popAndRespawn();
+          requestAnimationFrame(step);
+          return;
+        }
+
+        if (target) {
+          const targetTile = tiles[target.y][target.x];
+          if (targetTile.dataset.type !== "snow") {
+            popAndRespawn();
+            requestAnimationFrame(step);
+            return;
+          }
+        }
+
+        if (state === "walk" && !target) {
+          target = pickNextTarget(current);
+        }
+
+        if (state === "walk" && target) {
+          const targetPos = tileCenters[target.y][target.x];
+          const dx = targetPos.x - pos.x;
+          const dy = targetPos.y - pos.y;
+          const dist = Math.hypot(dx, dy);
+          if (Math.abs(dx) > 0.01) {
+            walker.style.setProperty("--bean-face", dx > 0 ? "1" : "-1");
+          }
+          if (dist <= moveSpeed) {
+            pos = { ...targetPos };
+            current = target;
+            target = null;
+          } else {
+            pos.x += (dx / dist) * moveSpeed;
+            pos.y += (dy / dist) * moveSpeed;
+          }
+          setPosition(pos);
+
+          if (time - lastFrameSwitch > 180) {
+            frame = frame === 0 ? 1 : 0;
+            walker.style.backgroundPosition = `-${frame * beanFrameW}px 0px`;
+            lastFrameSwitch = time;
+          }
+        } else {
+          if (time - lastIdleSwitch > 300) {
+            idleFrame = (idleFrame + 1) % 8;
+            walker.style.backgroundPosition = `-${idleFrame * beanFrameW}px 0px`;
+            lastIdleSwitch = time;
+          }
+        }
+
+        requestAnimationFrame(step);
+      };
+
+      requestAnimationFrame(step);
+      return {
+        element: walker,
+        getPos: () => ({ x: pos.x, y: pos.y }),
+        getCurrent: () => ({ x: current.x, y: current.y }),
+        isPopping: () => isPopping,
+        setFrozen: (value) => {
+          walker.dataset.frozen = value ? "true" : "false";
+        },
+        forceWalk: (durationMs) => {
+          scheduleState("walk", performance.now());
+          stateUntil = performance.now() + durationMs;
+        },
+        setTarget: (next) => {
+          target = next;
+        },
+        setPos: (nextPos) => {
+          pos = { ...nextPos };
+          setPosition(pos);
+        },
+      };
+    };
+
+    const beanWalker = createWalker({
+      className: "bean",
+      startX: cols - 1,
+      startY: rows - 1,
+      offsetX: -2,
+    });
+    const mfyeanWalker = createWalker({
+      className: "mfyean",
+      startX: cols - 1,
+      startY: rows - 1,
+      offsetX: 2,
+    });
+
+    const kiss = document.createElement("div");
+    kiss.className = "kiss";
+    kiss.style.backgroundPosition = "0px 0px";
+    iso.appendChild(kiss);
+
+    let kissFrame = 0;
+    let lastKissSwitch = performance.now();
+    let isKissing = false;
+    let kissStartedAt = 0;
+    let kissCooldownUntil = 0;
+    const walkFrameIntervalMs = 180;
+    const kissFrameIntervalMs = 500;
+    const kissDurationMs = kissFrameIntervalMs * kissFrames;
+
+    const pickNeighborAway = (from, awayFrom, preferLeft) => {
+      const neighbors = [
+        { x: from.x + 1, y: from.y },
+        { x: from.x - 1, y: from.y },
+        { x: from.x, y: from.y + 1 },
+        { x: from.x, y: from.y - 1 },
+      ].filter(
+        (pos) => pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows
+      );
+      const snowNeighbors = neighbors.filter(
+        (pos) => tiles[pos.y][pos.x].dataset.type === "snow"
+      );
+      if (snowNeighbors.length === 0) return null;
+      snowNeighbors.sort((a, b) => {
+        const da = Math.hypot(a.x - awayFrom.x, a.y - awayFrom.y);
+        const db = Math.hypot(b.x - awayFrom.x, b.y - awayFrom.y);
+        return db - da;
+      });
+      if (preferLeft !== null) {
+        const withScreenX = snowNeighbors.map((pos) => ({
+          pos,
+          screenX: tileCenters[pos.y][pos.x].x,
+        }));
+        withScreenX.sort((a, b) =>
+          preferLeft ? a.screenX - b.screenX : b.screenX - a.screenX
+        );
+        return withScreenX[0].pos;
+      }
+      return snowNeighbors[0];
+    };
+
+    const stepKiss = (time) => {
+      const beanPos = beanWalker.getPos();
+      const mfyeanPos = mfyeanWalker.getPos();
+      const dx = mfyeanPos.x - beanPos.x;
+      const dy = mfyeanPos.y - beanPos.y;
+      const dist = Math.hypot(dx, dy);
+      const closeEnough =
+        dist <= 4 && !beanWalker.isPopping() && !mfyeanWalker.isPopping();
+
+      if (!isKissing && closeEnough && time >= kissCooldownUntil) {
+        isKissing = true;
+        kissStartedAt = time;
+        beanWalker.setFrozen(true);
+        mfyeanWalker.setFrozen(true);
+      }
+
+      if (isKissing) {
+        const midX = (beanPos.x + mfyeanPos.x) / 2;
+        const midY = (beanPos.y + mfyeanPos.y) / 2;
+        kiss.style.left = `${midX}px`;
+        kiss.style.top = `${midY}px`;
+        const face = beanPos.x <= mfyeanPos.x ? "1" : "-1";
+        kiss.style.setProperty("--kiss-face", face);
+        kiss.classList.add("active");
+        beanWalker.element.classList.add("hidden");
+        mfyeanWalker.element.classList.add("hidden");
+
+        if (time - lastKissSwitch > kissFrameIntervalMs) {
+          kissFrame = (kissFrame + 1) % kissFrames;
+          kiss.style.backgroundPosition = `-${kissFrame * kissFrameW}px 0px`;
+          lastKissSwitch = time;
+        }
+
+        if (time - kissStartedAt >= kissDurationMs) {
+          isKissing = false;
+          kissCooldownUntil = time + 1200;
+          const beanTile = beanWalker.getCurrent();
+          const mfyeanTile = mfyeanWalker.getCurrent();
+          const beanAway = pickNeighborAway(beanTile, mfyeanTile, true);
+          const mfyeanAway = pickNeighborAway(mfyeanTile, beanTile, false);
+          if (beanAway) beanWalker.setTarget(beanAway);
+          if (mfyeanAway) mfyeanWalker.setTarget(mfyeanAway);
+          const midX = (beanPos.x + mfyeanPos.x) / 2;
+          const midY = (beanPos.y + mfyeanPos.y) / 2;
+          beanWalker.setPos({ x: midX - 1, y: midY });
+          mfyeanWalker.setPos({ x: midX + 1, y: midY });
+          beanWalker.forceWalk(1200);
+          mfyeanWalker.forceWalk(1200);
+          beanWalker.setFrozen(false);
+          mfyeanWalker.setFrozen(false);
+          kiss.classList.remove("active");
+          beanWalker.element.classList.remove("hidden");
+          mfyeanWalker.element.classList.remove("hidden");
+          kissFrame = 0;
+          kiss.style.backgroundPosition = "0px 0px";
+        }
+      } else {
+        kiss.classList.remove("active");
+        beanWalker.element.classList.remove("hidden");
+        mfyeanWalker.element.classList.remove("hidden");
+        kissFrame = 0;
+        kiss.style.backgroundPosition = "0px 0px";
+      }
+
+      requestAnimationFrame(stepKiss);
+    };
+
+    requestAnimationFrame(stepKiss);
+
+    viewport.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+        const direction = Math.sign(event.deltaY);
+        zoom = Math.min(6, Math.max(1, zoom - direction));
+        updateTransform();
+      },
+      { passive: false }
+    );
+
+
+    window.addEventListener("keydown", (event) => {
+      const step = 16;
+      const key = event.key.toLowerCase();
+
+      if (key === "w") panY += step;
+      if (key === "s") panY -= step;
+      if (key === "a") panX += step;
+      if (key === "d") panX -= step;
+
+      if (["w", "a", "s", "d"].includes(key)) {
+        event.preventDefault();
+        updateTransform();
+      }
+    });
+  </script>
+</body>
+</html>
