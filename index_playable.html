@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Project Sekai Farm Merge Grid</title>
   <style>
     :root {
@@ -23,22 +23,16 @@
     body {
       margin: 0;
       min-height: 100vh;
-      min-height: 100dvh;
       display: grid;
       place-items: center;
       background: var(--bg);
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-      overflow: hidden;
-      overscroll-behavior: none;
-      -webkit-user-select: none;
-      user-select: none;
     }
 
     .game-shell {
       display: grid;
       justify-items: center;
       gap: 10px;
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     .viewport {
@@ -99,12 +93,6 @@
       opacity: 1;
     }
 
-    .tile.is-drop-preview::after {
-      opacity: 1;
-      background: rgba(92, 198, 59, 0.34);
-      animation: drop-preview-pulse 700ms ease-in-out infinite;
-    }
-
     .tile-lock {
       position: absolute;
       width: var(--tile-w);
@@ -148,10 +136,12 @@
     }
 
     .board-item .board-object {
-      left: 0;
-      top: 0;
-      transform: none;
-      transform-origin: center center;
+      left: 50%;
+      right: auto;
+      bottom: 0;
+      top: auto;
+      transform: translateX(-50%) scale(var(--item-scale, 1));
+      transform-origin: bottom center;
     }
 
     .board-item.is-collectible {
@@ -295,15 +285,15 @@
 
     @keyframes merge-fly {
       0% {
-        transform: translate(-50%, -100%) scale(1);
+        transform: translate(-50%, -100%) scale(var(--merge-scale, 1));
         opacity: 1;
       }
       70% {
-        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy) - 5px)) scale(0.82);
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy) - 5px)) scale(calc(var(--merge-scale, 1) * 0.82));
         opacity: 1;
       }
       100% {
-        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy))) scale(0.35);
+        transform: translate(calc(-50% + var(--merge-dx)), calc(-100% + var(--merge-dy))) scale(calc(var(--merge-scale, 1) * 0.35));
         opacity: 0;
       }
     }
@@ -371,15 +361,6 @@
 
     .reset-button:hover {
       background: rgba(54, 54, 86, 0.9);
-    }
-
-    @keyframes drop-preview-pulse {
-      0%, 100% {
-        opacity: 0.72;
-      }
-      50% {
-        opacity: 1;
-      }
     }
 
     .xp-counter {
@@ -877,87 +858,6 @@
       }
     }
 
-    @media (pointer: coarse) {
-      .game-shell {
-        gap: 8px;
-      }
-
-      .viewport {
-        width: 100vw;
-        height: min(calc(100dvh - 34px), 60vw, 738px);
-        border-radius: 18px;
-      }
-
-      .xp-counter,
-      .reset-button {
-        min-height: 44px;
-        padding-inline: 16px;
-      }
-
-      .xp-counter {
-        left: max(16px, env(safe-area-inset-left));
-        top: max(16px, env(safe-area-inset-top));
-        font-size: 16px;
-      }
-
-      .reset-button {
-        left: max(16px, env(safe-area-inset-left));
-        top: 68px;
-      }
-
-      .spawner {
-        width: 96px;
-        height: 96px;
-        bottom: 42px;
-      }
-
-      .reward-inventory-counter {
-        right: max(16px, env(safe-area-inset-right));
-        top: max(16px, env(safe-area-inset-top));
-      }
-
-      .reward-inventory-item {
-        min-width: 72px;
-        min-height: 44px;
-        padding: 8px 10px;
-      }
-
-      .order-panel {
-        left: max(16px, env(safe-area-inset-left));
-        bottom: max(16px, env(safe-area-inset-bottom));
-        width: 246px;
-      }
-
-      .order-complete {
-        height: 44px;
-        font-size: 15px;
-      }
-
-      .drag-ghost {
-        width: 116px;
-        height: 112px;
-      }
-
-      .version-line {
-        font-size: 12px;
-      }
-    }
-
-    @media (pointer: coarse) and (orientation: portrait) {
-      body {
-        align-items: start;
-      }
-
-      .game-shell {
-        padding-top: 10px;
-      }
-
-      .viewport {
-        width: 100vw;
-        height: min(calc(100dvh - 34px), 738px);
-        aspect-ratio: auto;
-      }
-    }
   </style>
 </head>
 <body>
@@ -1011,7 +911,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.1</div>
+    <div class="version-line">version 0.0.3</div>
   </main>
 
   <script>
@@ -1073,9 +973,6 @@
     const saveKey = "merge-sekai-save-v1";
     const spawnPadding = 1;
     const panLimit = 280;
-    const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-    const dragMoveThreshold = isCoarsePointer ? 12 : 4;
-    const dropSnapScale = isCoarsePointer ? 1.08 : 0.72;
     let panY = 0;
     let isPanning = false;
     let startPointerY = 0;
@@ -1206,7 +1103,6 @@
     let didDragMove = false;
     let tilePlacementPoints = [];
     let mergePreviewIds = new Set();
-    let dropPreviewTileKey = null;
     let mergeCountPopup = null;
     let cooldownPopupTimeout = null;
     let lastOriginX = 0;
@@ -1531,7 +1427,7 @@
         file: config.rewardFile,
         name: `${config.finalName.replace(" 4", "")} reward`,
         count: 1,
-        rewardCrates: 10,
+        rewardCrates: 5,
         rewardXp: 10
       };
     }
@@ -1545,7 +1441,7 @@
 
       activeOrder.name = `${orderConfig.finalName.replace(" 4", "")} reward`;
       activeOrder.count = 1;
-      activeOrder.rewardCrates = 10;
+      activeOrder.rewardCrates = 5;
       activeOrder.rewardXp = 10;
     }
 
@@ -1881,6 +1777,7 @@
         flyer.style.top = `${source.y}px`;
         flyer.style.setProperty("--merge-dx", `${target.x - source.x}px`);
         flyer.style.setProperty("--merge-dy", `${target.y - source.y}px`);
+        flyer.style.setProperty("--merge-scale", getItemVisualScale(object.file));
         flyer.style.animationDelay = `${index * 40}ms`;
 
         iso.appendChild(flyer);
@@ -1934,27 +1831,6 @@
       }
     }
 
-    function clearDropHoverPreview() {
-      if (!dropPreviewTileKey) return;
-
-      const [x, y] = dropPreviewTileKey.split(",");
-      const tile = iso.querySelector(`.tile[data-x="${x}"][data-y="${y}"]`);
-      if (tile) tile.classList.remove("is-drop-preview");
-      dropPreviewTileKey = null;
-    }
-
-    function updateDropHoverPreview(event) {
-      clearDropHoverPreview();
-      if (!draggedObject || !didDragMove) return;
-
-      const targetTile = findNearestTile(event.clientX, event.clientY);
-      if (!targetTile) return;
-
-      dropPreviewTileKey = `${targetTile.x},${targetTile.y}`;
-      const tile = iso.querySelector(`.tile[data-x="${targetTile.x}"][data-y="${targetTile.y}"]`);
-      if (tile) tile.classList.add("is-drop-preview");
-    }
-
     function updateMergeHoverPreview(event) {
       clearMergeHoverPreview();
       if (!draggedObject || !didDragMove) return;
@@ -1985,6 +1861,14 @@
     function getMergeItemLevel(file) {
       const match = file.match(/_(\d+)\.png$/);
       return match ? Number(match[1]) : null;
+    }
+
+    function getItemVisualScale(file) {
+      const level = getMergeItemLevel(file);
+      if (level === 1) return 0.4;
+      if (level === 2) return 0.6;
+      if (level === 3) return 0.8;
+      return 1;
     }
 
     function getMergeXp(file, mergeCount) {
@@ -2176,7 +2060,7 @@
     function findNearestTile(clientX, clientY) {
       let nearest = null;
       let nearestDistance = Infinity;
-      const maxDistance = tileW * zoom * dropSnapScale;
+      const maxDistance = tileW * zoom * 0.72;
       const viewportRect = viewport.getBoundingClientRect();
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
@@ -2251,10 +2135,10 @@
       dragged.y = targetOrigin.y;
     }
 
-    function moveDragGhost(clientX, clientY, pointerType = "mouse") {
+    function moveDragGhost(clientX, clientY) {
       if (!dragGhost) return;
       dragGhost.style.left = `${clientX}px`;
-      dragGhost.style.top = `${pointerType === "touch" ? clientY - 58 : clientY}px`;
+      dragGhost.style.top = `${clientY}px`;
     }
 
     function endObjectDrag(event) {
@@ -2317,8 +2201,10 @@
       dragGhost.className = "drag-ghost";
       dragGhost.src = `Asset/${object.file}`;
       dragGhost.alt = "";
+      dragGhost.style.width = `${24 * zoom * getItemVisualScale(object.file)}px`;
+      dragGhost.style.height = `${23 * zoom * getItemVisualScale(object.file)}px`;
       document.body.appendChild(dragGhost);
-      moveDragGhost(event.clientX, event.clientY, event.pointerType);
+      moveDragGhost(event.clientX, event.clientY);
 
       window.addEventListener("pointermove", handleObjectDragMove);
       window.addEventListener("pointerup", handleObjectDragEnd, { once: true });
@@ -2327,11 +2213,10 @@
 
     function handleObjectDragMove(event) {
       if (!draggedObject) return;
-      if (Math.hypot(event.clientX - dragStartClientX, event.clientY - dragStartClientY) > dragMoveThreshold) {
+      if (Math.hypot(event.clientX - dragStartClientX, event.clientY - dragStartClientY) > 4) {
         didDragMove = true;
       }
-      moveDragGhost(event.clientX, event.clientY, event.pointerType);
-      updateDropHoverPreview(event);
+      moveDragGhost(event.clientX, event.clientY);
       updateMergeHoverPreview(event);
     }
 
@@ -2339,7 +2224,6 @@
       window.removeEventListener("pointermove", handleObjectDragMove);
       window.removeEventListener("pointerup", handleObjectDragEnd);
       window.removeEventListener("pointercancel", handleObjectDragEnd);
-      clearDropHoverPreview();
       clearMergeHoverPreview();
       endObjectDrag(event);
     }
@@ -2373,6 +2257,7 @@
         wrapper.style.left = `${screenX + tileCenterX}px`;
         wrapper.style.top = `${screenY + itemFootY}px`;
         wrapper.style.zIndex = `${object.x + object.y + 100}`;
+        wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file));
 
         img.className = "board-object";
         img.src = `Asset/${object.file}`;
@@ -2434,7 +2319,6 @@
     function buildGrid() {
       iso.innerHTML = "";
       tilePlacementPoints = [];
-      dropPreviewTileKey = null;
 
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
@@ -2501,15 +2385,6 @@
       }
 
       renderSpawnedObjects(originX, originY);
-    }
-
-    let resizeBuildTimer = null;
-    function scheduleGridResize() {
-      if (resizeBuildTimer) window.clearTimeout(resizeBuildTimer);
-      resizeBuildTimer = window.setTimeout(() => {
-        resizeBuildTimer = null;
-        buildGrid();
-      }, 80);
     }
 
     viewport.addEventListener("pointerdown", (event) => {
@@ -2588,11 +2463,6 @@
       updateSpawnerTimer();
       saveGame();
     });
-
-    window.addEventListener("resize", scheduleGridResize);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", scheduleGridResize);
-    }
 
     loadGame();
     normalizeBoardObjects();
