@@ -29,6 +29,12 @@
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
 
+    .game-shell {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+    }
+
     .viewport {
       width: var(--viewport-w);
       height: var(--viewport-h);
@@ -42,6 +48,15 @@
       cursor: grab;
       user-select: none;
       touch-action: none;
+    }
+
+    .version-line {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+      user-select: none;
     }
 
     .viewport.is-panning {
@@ -843,55 +858,58 @@
   </style>
 </head>
 <body>
-  <div class="viewport">
-    <div id="iso" class="iso-layer" aria-label="10 by 10 isometric grass cube grid"></div>
-    <div class="soft-fade"></div>
-    <button id="xpCounter" class="xp-counter" type="button" aria-label="Player level">
-      <img src="Asset/EXP_Note.png" alt="" />
-      <span id="xpCount">0</span>
-      <span id="xpDetail" class="xp-detail" hidden>0 EXP</span>
-    </button>
-    <button id="resetButton" class="reset-button" type="button">Reset</button>
-    <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
-      <img src="Asset/box.png" alt="" />
-      <span id="spawnerCount" class="spawner-count">60/60</span>
-      <span id="spawnerTimer" class="spawner-timer">5:00</span>
-    </button>
-    <div class="reward-inventory-counter" aria-label="Reward inventory">
-      <div class="reward-inventory-item">
-        <img src="Asset/chr_il/chr_il_17.png" alt="" />
-        <span id="kanadeRewardInventoryCount">0</span>
-      </div>
-      <div class="reward-inventory-item">
-        <img src="Asset/chr_il/chr_il_18.png" alt="" />
-        <span id="mafuyuRewardInventoryCount">0</span>
-      </div>
-      <div class="reward-inventory-item">
-        <img src="Asset/chr_il/chr_il_19.png" alt="" />
-        <span id="enaRewardInventoryCount">0</span>
-      </div>
-      <div class="reward-inventory-item">
-        <img src="Asset/chr_il/chr_il_20.png" alt="" />
-        <span id="mizukiRewardInventoryCount">0</span>
-      </div>
-    </div>
-    <div class="order-panel" aria-label="Current order">
-      <div class="order-title">Order</div>
-      <div class="order-row">
-        <img id="orderIcon" src="Asset/Kanade_1.png" alt="" />
-        <div id="orderText" class="order-text">Loading...</div>
-      </div>
-      <div class="order-reward">
-        <img src="Asset/box.png" alt="" />
-        <span id="orderReward">+0 crates</span>
-      </div>
-      <div class="order-reward">
+  <main class="game-shell">
+    <div class="viewport">
+      <div id="iso" class="iso-layer" aria-label="10 by 10 isometric grass cube grid"></div>
+      <div class="soft-fade"></div>
+      <button id="xpCounter" class="xp-counter" type="button" aria-label="Player level">
         <img src="Asset/EXP_Note.png" alt="" />
-        <span id="orderXpReward">+0 EXP</span>
+        <span id="xpCount">0</span>
+        <span id="xpDetail" class="xp-detail" hidden>0 EXP</span>
+      </button>
+      <button id="resetButton" class="reset-button" type="button">Reset</button>
+      <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
+        <img src="Asset/box.png" alt="" />
+        <span id="spawnerCount" class="spawner-count">60/60</span>
+        <span id="spawnerTimer" class="spawner-timer">5:00</span>
+      </button>
+      <div class="reward-inventory-counter" aria-label="Reward inventory">
+        <div class="reward-inventory-item">
+          <img src="Asset/chr_il/chr_il_17.png" alt="" />
+          <span id="kanadeRewardInventoryCount">0</span>
+        </div>
+        <div class="reward-inventory-item">
+          <img src="Asset/chr_il/chr_il_18.png" alt="" />
+          <span id="mafuyuRewardInventoryCount">0</span>
+        </div>
+        <div class="reward-inventory-item">
+          <img src="Asset/chr_il/chr_il_19.png" alt="" />
+          <span id="enaRewardInventoryCount">0</span>
+        </div>
+        <div class="reward-inventory-item">
+          <img src="Asset/chr_il/chr_il_20.png" alt="" />
+          <span id="mizukiRewardInventoryCount">0</span>
+        </div>
       </div>
-      <button id="orderComplete" class="order-complete" type="button">Complete</button>
+      <div class="order-panel" aria-label="Current order">
+        <div class="order-title">Order</div>
+        <div class="order-row">
+          <img id="orderIcon" src="Asset/Kanade_1.png" alt="" />
+          <div id="orderText" class="order-text">Loading...</div>
+        </div>
+        <div class="order-reward">
+          <img src="Asset/box.png" alt="" />
+          <span id="orderReward">+0 crates</span>
+        </div>
+        <div class="order-reward">
+          <img src="Asset/EXP_Note.png" alt="" />
+          <span id="orderXpReward">+0 EXP</span>
+        </div>
+        <button id="orderComplete" class="order-complete" type="button">Complete</button>
+      </div>
     </div>
-  </div>
+    <div class="version-line">version 0.0</div>
+  </main>
 
   <script>
     const iso = document.getElementById("iso");
