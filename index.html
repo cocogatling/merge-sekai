@@ -84,6 +84,8 @@
       position: absolute;
       inset: 0;
       transform-origin: 50% 50%;
+      will-change: transform;
+      contain: layout paint style;
     }
 
     .tile {
@@ -1342,6 +1344,15 @@
         top: calc(max(14px, env(safe-area-inset-top)) + 42px);
       }
 
+      .discord-activity .tile,
+      .discord-activity .tile-lock {
+        filter: none;
+      }
+
+      .discord-activity .board-object {
+        filter: drop-shadow(0 3px 3px rgba(15, 34, 54, 0.24));
+      }
+
       .order-panel {
         left: max(12px, env(safe-area-inset-left));
         bottom: calc(max(16px, env(safe-area-inset-bottom)) + 128px);
@@ -1552,7 +1563,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.25</div>
+    <div class="version-line">version 0.0.25.1</div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -1658,6 +1669,11 @@
     let pinchStartPanY = 0;
     let pinchStartCenter = { x: 0, y: 0 };
     let pinchCurrentCenter = { x: 0, y: 0 };
+    let transformFrame = null;
+    let pendingTransform = null;
+    let resizeRefreshTimeout = null;
+    let cloudSaveTimeout = null;
+    let pendingCloudSave = null;
     const maxSpawnerItems = 60;
     const restoreAmount = 5;
     const restoreDelayMs = 5 * 60 * 1000;
@@ -1845,6 +1861,14 @@
       return window.matchMedia("(orientation: portrait) and (max-width: 480px)").matches;
     }
 
+    function isDiscordActivity() {
+      return document.documentElement.classList.contains("discord-activity");
+    }
+
+    function isDiscordPortraitPhoneViewport() {
+      return isDiscordActivity() && isPortraitPhoneViewport();
+    }
+
     function isOrthographicBoard() {
       return isPortraitPhoneViewport() || boardProjection === "orthographic";
     }
@@ -1948,12 +1972,29 @@
       };
     }
 
-    function updateTransform(scale = 1, translateX = panX, translateY = panY) {
+    function applyTransform(scale = 1, translateX = panX, translateY = panY) {
       const snappedX = snapScreenPixel(translateX);
       const snappedY = snapScreenPixel(translateY);
       iso.style.transform = scale === 1
         ? `translate(${snappedX}px, ${snappedY}px)`
         : `translate(${snappedX}px, ${snappedY}px) scale(${scale})`;
+    }
+
+    function updateTransform(scale = 1, translateX = panX, translateY = panY) {
+      if (!isDiscordPortraitPhoneViewport() || (!isPanning && !isPinchingBoard)) {
+        applyTransform(scale, translateX, translateY);
+        return;
+      }
+
+      pendingTransform = { scale, translateX, translateY };
+      if (transformFrame !== null) return;
+
+      transformFrame = requestAnimationFrame(() => {
+        transformFrame = null;
+        if (!pendingTransform) return;
+        applyTransform(pendingTransform.scale, pendingTransform.translateX, pendingTransform.translateY);
+        pendingTransform = null;
+      });
     }
 
     function updateZoomControls() {
@@ -2335,6 +2376,10 @@
       return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
     }
 
+    function cloneSaveData(save) {
+      return JSON.parse(JSON.stringify(save));
+    }
+
     function createNewSave() {
       return {
         version: 1,
@@ -2360,9 +2405,18 @@
     function saveGame() {
       const save = createNewSave();
       setLocalSave(save);
-      getCloudSaveUserId().then((userId) => saveCloudSave(userId, save)).catch((error) => {
-        console.warn("Cloud autosave skipped:", error.message);
-      });
+      pendingCloudSave = cloneSaveData(save);
+
+      if (cloudSaveTimeout) clearTimeout(cloudSaveTimeout);
+      cloudSaveTimeout = setTimeout(() => {
+        const cloudSave = pendingCloudSave;
+        pendingCloudSave = null;
+        cloudSaveTimeout = null;
+
+        getCloudSaveUserId().then((userId) => saveCloudSave(userId, cloudSave)).catch((error) => {
+          console.warn("Cloud autosave skipped:", error.message);
+        });
+      }, isDiscordPortraitPhoneViewport() ? 1800 : 500);
     }
 
     function applySaveData(save) {
@@ -3605,6 +3659,28 @@
       if (document.hidden) cancelObjectDrag();
     }
 
+    function refreshViewportLayout() {
+      boardZoom = normalizeBoardZoom(boardZoom);
+      updateZoomControls();
+      buildGrid();
+      if (isMobileOrderDrawer() && !isActiveOrderCompletable()) {
+        setOrderPanelOpen(false);
+      }
+      updateOrderPanel();
+    }
+
+    function scheduleViewportLayoutRefresh() {
+      if (resizeRefreshTimeout) clearTimeout(resizeRefreshTimeout);
+      resizeRefreshTimeout = setTimeout(() => {
+        resizeRefreshTimeout = null;
+        if (isPanning || isPinchingBoard || draggedObject) {
+          scheduleViewportLayoutRefresh();
+          return;
+        }
+        refreshViewportLayout();
+      }, isDiscordPortraitPhoneViewport() ? 180 : 60);
+    }
+
     function endObjectDrag(event) {
       if (!draggedObject) return;
 
@@ -4151,15 +4227,8 @@
       setInterval(applySpawnerRestoreCatchup, 1000);
       setInterval(updateSpawnerTimer, 1000);
       setInterval(refreshSleepingCharacterItems, 1000);
-      window.addEventListener("resize", () => {
-        boardZoom = normalizeBoardZoom(boardZoom);
-        updateZoomControls();
-        buildGrid();
-        if (isMobileOrderDrawer() && !isActiveOrderCompletable()) {
-          setOrderPanelOpen(false);
-        }
-        updateOrderPanel();
-      });
+      window.addEventListener("resize", scheduleViewportLayoutRefresh);
+      window.visualViewport?.addEventListener("resize", scheduleViewportLayoutRefresh);
 
       if ("serviceWorker" in navigator && window.isSecureContext) {
         window.addEventListener("load", () => {
