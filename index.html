@@ -1255,7 +1255,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.9</div>
+    <div class="version-line">version 0.0.10</div>
   </main>
 
   <script>
@@ -2468,7 +2468,7 @@
         flyer.style.top = `${source.y}px`;
         flyer.style.setProperty("--merge-dx", `${target.x - source.x}px`);
         flyer.style.setProperty("--merge-dy", `${target.y - source.y}px`);
-        flyer.style.setProperty("--merge-scale", getItemVisualScale(object.file) * boardZoom);
+        flyer.style.setProperty("--merge-scale", getRenderedItemScale(object.file));
         flyer.style.animationDelay = `${index * 40}ms`;
 
         iso.appendChild(flyer);
@@ -2556,10 +2556,21 @@
 
     function getItemVisualScale(file) {
       const level = getMergeItemLevel(file);
+      if (isOrthographicBoard()) {
+        if (level === 1) return 0.74;
+        if (level === 2) return 0.9;
+        if (level === 3) return 1.06;
+        return 1.22;
+      }
+
       if (level === 1) return 0.4;
       if (level === 2) return 0.6;
       if (level === 3) return 0.8;
       return 1;
+    }
+
+    function getRenderedItemScale(file) {
+      return getItemVisualScale(file) * boardZoom;
     }
 
     function getMergeXp(file, mergeCount) {
@@ -2887,7 +2898,7 @@
       dragGhost.className = "drag-ghost";
       dragGhost.src = `Asset/${object.file}`;
       dragGhost.alt = "";
-      dragGhost.style.setProperty("--ghost-scale", boardZoom * getItemVisualScale(object.file));
+      dragGhost.style.setProperty("--ghost-scale", getRenderedItemScale(object.file));
       document.body.appendChild(dragGhost);
       moveDragGhost(event.clientX, event.clientY);
 
@@ -2943,7 +2954,7 @@
         wrapper.style.left = `${screen.x + metrics.tileCenterX}px`;
         wrapper.style.top = `${screen.y + metrics.itemFootY}px`;
         wrapper.style.zIndex = `${screen.z + 100}`;
-        wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file) * boardZoom);
+        wrapper.style.setProperty("--item-scale", getRenderedItemScale(object.file));
 
         hitbox.className = "board-item-hitbox";
 
