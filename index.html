@@ -2327,11 +2327,15 @@
     function applySpawnerRestoreCatchup() {
       if (spawnerItems >= maxSpawnerItems) {
         nextRestoreAt = null;
+        updateSpawnerCount();
+        updateSpawnerTimer();
         return;
       }
 
       if (nextRestoreAt === null) {
         nextRestoreAt = Date.now() + restoreDelayMs;
+        updateSpawnerTimer();
+        saveGame();
         return;
       }
 
@@ -2343,6 +2347,8 @@
       nextRestoreAt = spawnerItems >= maxSpawnerItems
         ? null
         : nextRestoreAt + restoreCycles * restoreDelayMs;
+      updateSpawnerCount();
+      updateSpawnerTimer();
       saveGame();
     }
 
