@@ -1378,7 +1378,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.12</div>
+    <div class="version-line">version 0.0.13</div>
   </main>
 
   <script>
@@ -1418,7 +1418,7 @@
     const portraitPhoneMaxZoom = 8;
     const portraitPhoneDefaultZoom = 3;
     const desktopZoomStep = 0.25;
-    const mobileZoomStep = 1;
+    const mobileZoomStep = 0.25;
 
     const boardShape = [
       "XXXX",
@@ -1698,7 +1698,7 @@
 
     function normalizeBoardZoom(value) {
       const clamped = clamp(value, getMinZoom(), getMaxZoom());
-      return isTouchViewport() ? Math.round(clamped) : Number(clamped.toFixed(2));
+      return Number(clamped.toFixed(2));
     }
 
     function getViewportLocalPoint(clientX, clientY) {
