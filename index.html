@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="Asset/box.png" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <title>Project Sekai Farm Merge Grid</title>
   <style>
     :root {
@@ -1362,7 +1363,7 @@
         <button id="zoomOutButton" class="zoom-button" type="button" aria-label="Zoom out">-</button>
         <button id="zoomInButton" class="zoom-button" type="button" aria-label="Zoom in">+</button>
       </div>
-      <button id="flipButton" class="flip-button" type="button">9x4</button>
+      <button id="flipButton" class="flip-button" type="button">Portrait</button>
       <button id="projectionButton" class="projection-button" type="button">Iso</button>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
@@ -1407,7 +1408,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.14</div>
+    <div class="version-line">version 0.0.15</div>
   </main>
 
   <script>
@@ -1436,6 +1437,10 @@
     const orderToggle = document.getElementById("orderToggle");
     const orderPanel = document.querySelector(".order-panel");
     const styles = getComputedStyle(document.documentElement);
+    const supabaseClient = supabase.createClient(
+      "https://hrxkflnvevjhzqiukamp.supabase.co/",
+      "sb_publishable_lu0S5haHms8QgDlYyjO8CA_LtMVeW0D"
+    );
 
     const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
     const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
@@ -1478,13 +1483,13 @@
     const tileCenterX = tileW / 2;
     const tileCenterY = tileImgH / 2;
     const itemFootY = 11;
-    const saveKey = "merge-sekai-save-v1";
+    const LOCAL_SAVE_KEY = "merge-sekai-save-v1";
     const spawnPadding = 1;
     const panLimit = 280;
     const mousePanDeadzone = 4;
     const touchPanDeadzone = 10;
     let boardZoom = getDefaultZoom();
-    let isBoardFlipped = false;
+    let isBoardFlipped = getDefaultBoardFlipped();
     let boardProjection = "orthographic";
     let panX = 0;
     let panY = 0;
@@ -1678,6 +1683,10 @@
 
     function getDefaultZoom() {
       return isPortraitPhoneViewport() ? portraitPhoneDefaultZoom : defaultZoom;
+    }
+
+    function getDefaultBoardFlipped() {
+      return !isPortraitPhoneViewport();
     }
 
     function snapScreenPixel(value) {
@@ -1929,15 +1938,15 @@
     }
 
     function updateFlipButton() {
-      const currentSize = isBoardFlipped ? "4x9" : "9x4";
-      const nextSize = isBoardFlipped ? "9 by 4" : "4 by 9";
+      const currentLayout = isBoardFlipped ? "Landscape" : "Portrait";
+      const nextLayout = isBoardFlipped ? "portrait" : "landscape";
 
-      flipButton.textContent = currentSize;
+      flipButton.textContent = currentLayout;
       flipButton.setAttribute(
         "aria-label",
-        `Flip board to ${nextSize}`
+        `Switch board to ${nextLayout}`
       );
-      iso.setAttribute("aria-label", `${currentSize} isometric grass cube grid`);
+      iso.setAttribute("aria-label", `${currentLayout} ${isOrthographicBoard() ? "orthographic" : "isometric"} grass grid`);
     }
 
     function updateProjectionButton() {
@@ -1949,7 +1958,7 @@
       );
       iso.setAttribute(
         "aria-label",
-        `${isBoardFlipped ? "4x9" : "9x4"} ${isOrthographicBoard() ? "orthographic" : "isometric"} grass grid`
+        `${isBoardFlipped ? "Landscape" : "Portrait"} ${isOrthographicBoard() ? "orthographic" : "isometric"} grass grid`
       );
     }
 
@@ -1974,6 +1983,48 @@
       spawnerTimer.hidden = spawnerItems >= maxSpawnerItems;
     }
 
+    function getLocalSave() {
+      const raw = localStorage.getItem(LOCAL_SAVE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }
+
+    function setLocalSave(saveData) {
+      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(saveData));
+    }
+
+    const TEST_USER_ID = "test-user-001";
+
+    async function loadCloudSave(userId) {
+      const { data, error } = await supabaseClient
+        .from("saves")
+        .select("save_data")
+        .eq("user_id", userId)
+        .single();
+
+      if (error) {
+        console.warn("No cloud save found:", error.message);
+        return null;
+      }
+
+      return data.save_data;
+    }
+
+    async function saveCloudSave(userId, saveData) {
+      const { error } = await supabaseClient
+        .from("saves")
+        .upsert({
+          user_id: userId,
+          save_data: saveData,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: "user_id"
+        });
+
+      if (error) {
+        console.error("Cloud save failed:", error.message);
+      }
+    }
+
     function saveGame() {
       const save = {
         version: 1,
@@ -1995,15 +2046,14 @@
         spawnedObjects
       };
 
-      localStorage.setItem(saveKey, JSON.stringify(save));
+      setLocalSave(save);
     }
 
     function loadGame() {
-      const rawSave = localStorage.getItem(saveKey);
-      if (!rawSave) return;
-
       try {
-        const save = JSON.parse(rawSave);
+        const save = getLocalSave();
+        if (!save) return;
+
         spawnerItems = Number.isFinite(save.spawnerItems)
           ? clamp(save.spawnerItems, 0, maxSpawnerItems)
           : maxSpawnerItems;
@@ -2036,7 +2086,7 @@
     }
 
     function resetGame() {
-      localStorage.removeItem(saveKey);
+      localStorage.removeItem(LOCAL_SAVE_KEY);
       spawnerItems = maxSpawnerItems;
       nextRestoreAt = null;
       nextObjectId = 1;
@@ -2050,7 +2100,7 @@
       panX = 0;
       panY = 0;
       boardZoom = normalizeBoardZoom(getDefaultZoom());
-      isBoardFlipped = false;
+      isBoardFlipped = getDefaultBoardFlipped();
       boardProjection = "orthographic";
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
