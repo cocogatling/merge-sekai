@@ -1378,7 +1378,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.13</div>
+    <div class="version-line">version 0.0.14</div>
   </main>
 
   <script>
@@ -2105,14 +2105,21 @@
       );
     }
 
-    function showLevelUpPopup(newLevel, unlockedCharacters, crateBonus) {
+    function getUnlockedBoardTileCount(level) {
+      return boardUnlockLevels.reduce((total, row) =>
+        total + row.filter((unlockLevel) => level >= unlockLevel).length,
+        0
+      );
+    }
+
+    function showLevelUpPopup(newLevel, unlockedCharacters, crateBonus, spaceIncrease) {
       const existingPopup = viewport.querySelector(".level-up-popup");
       if (existingPopup) existingPopup.remove();
 
       const popup = document.createElement("div");
       const unlockText = unlockedCharacters.length > 0
         ? `Unlocked ${unlockedCharacters.join(", ")}`
-        : "New rewards unlocked";
+        : `+${spaceIncrease} board ${spaceIncrease === 1 ? "space" : "spaces"} unlocked`;
 
       popup.className = "level-up-popup";
       popup.innerHTML = `
@@ -2178,7 +2185,8 @@
         characterConfigs
           .filter((config) => config.unlockLevel > previousLevel && config.unlockLevel <= nextLevel)
           .map((config) => config.finalName.replace(" 4", "")),
-        gainedLevels * levelUpSpawnerBonus
+        gainedLevels * levelUpSpawnerBonus,
+        getUnlockedBoardTileCount(nextLevel) - getUnlockedBoardTileCount(previousLevel)
       );
     }
 
