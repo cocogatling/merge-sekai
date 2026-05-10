@@ -75,7 +75,6 @@
       position: absolute;
       inset: 0;
       transform-origin: 50% 50%;
-      will-change: transform;
     }
 
     .tile {
@@ -125,7 +124,6 @@
       transform: translate(-50%, -100%);
       transform-origin: bottom center;
       filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
-      will-change: transform;
     }
 
     .board-object.is-dragging {
@@ -258,7 +256,6 @@
       transform: translate(-50%, -50%) scale(var(--ghost-scale, 1));
       transform-origin: center;
       filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
-      will-change: transform;
     }
 
     .merge-flyer {
@@ -1008,7 +1005,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.4</div>
+    <div class="version-line">version 0.0.5</div>
   </main>
 
   <script>
@@ -1085,10 +1082,20 @@
     let panY = 0;
     let isPanning = false;
     let hasPannedBoard = false;
+    let activePanPointerId = null;
     let startPointerX = 0;
     let startPointerY = 0;
     let startPanX = 0;
     let startPanY = 0;
+    const activeBoardPointers = new Map();
+    let isPinchingBoard = false;
+    let pinchStartDistance = 0;
+    let pinchStartZoom = defaultZoom;
+    let pinchPreviewZoom = defaultZoom;
+    let pinchStartPanX = 0;
+    let pinchStartPanY = 0;
+    let pinchStartCenter = { x: 0, y: 0 };
+    let pinchCurrentCenter = { x: 0, y: 0 };
     const maxSpawnerItems = 60;
     const restoreAmount = 5;
     const restoreDelayMs = 5 * 60 * 1000;
@@ -1234,7 +1241,11 @@
     }
 
     function snapBoardPixel(value) {
-      return Math.round(value * boardZoom) / boardZoom;
+      return Math.round(value);
+    }
+
+    function zoomSize(value) {
+      return Math.round(value * boardZoom);
     }
 
     function getZoomStep() {
@@ -1246,8 +1257,41 @@
       return isTouchViewport() ? Math.round(clamped) : Number(clamped.toFixed(2));
     }
 
-    function updateTransform() {
-      iso.style.transform = `translate3d(${snapScreenPixel(panX)}px, ${snapScreenPixel(panY)}px, 0) scale(${boardZoom})`;
+    function getViewportLocalPoint(clientX, clientY) {
+      const rect = viewport.getBoundingClientRect();
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    function getPanForZoom(oldZoom, newZoom, oldPanX, oldPanY, focalPoint) {
+      const ratio = newZoom / oldZoom;
+      const origin = {
+        x: viewport.clientWidth / 2,
+        y: viewport.clientHeight / 2
+      };
+      const unpannedPoint = {
+        x: focalPoint.x - oldPanX,
+        y: focalPoint.y - oldPanY
+      };
+      const zoomedPoint = {
+        x: origin.x + (unpannedPoint.x - origin.x) * ratio,
+        y: origin.y + (unpannedPoint.y - origin.y) * ratio
+      };
+
+      return {
+        x: snapScreenPixel(clamp(focalPoint.x - zoomedPoint.x, -panLimit, panLimit)),
+        y: snapScreenPixel(clamp(focalPoint.y - zoomedPoint.y, -panLimit, panLimit))
+      };
+    }
+
+    function updateTransform(scale = 1, translateX = panX, translateY = panY) {
+      const snappedX = snapScreenPixel(translateX);
+      const snappedY = snapScreenPixel(translateY);
+      iso.style.transform = scale === 1
+        ? `translate(${snappedX}px, ${snappedY}px)`
+        : `translate(${snappedX}px, ${snappedY}px) scale(${scale})`;
     }
 
     function updateZoomControls() {
@@ -1255,15 +1299,110 @@
       zoomInButton.disabled = boardZoom >= maxZoom;
     }
 
-    function setBoardZoom(value, shouldSave = true) {
-      boardZoom = normalizeBoardZoom(value);
-      updateTransform();
+    function setBoardZoom(value, shouldSave = true, focalPoint = null) {
+      const previousZoom = boardZoom;
+      const nextZoom = normalizeBoardZoom(value);
+
+      if (focalPoint && nextZoom !== previousZoom) {
+        const nextPan = getPanForZoom(previousZoom, nextZoom, panX, panY, focalPoint);
+        panX = nextPan.x;
+        panY = nextPan.y;
+      }
+
+      boardZoom = nextZoom;
       updateZoomControls();
+      buildGrid();
       if (shouldSave) saveGame();
     }
 
     function adjustBoardZoom(delta) {
-      setBoardZoom(boardZoom + delta);
+      setBoardZoom(boardZoom + delta, true, {
+        x: viewport.clientWidth / 2,
+        y: viewport.clientHeight / 2
+      });
+    }
+
+    function getBoardPointerPair() {
+      return Array.from(activeBoardPointers.values()).slice(0, 2);
+    }
+
+    function getPointerPairDistance(pointerA, pointerB) {
+      return Math.hypot(pointerB.clientX - pointerA.clientX, pointerB.clientY - pointerA.clientY);
+    }
+
+    function getPointerPairCenter(pointerA, pointerB) {
+      return getViewportLocalPoint(
+        (pointerA.clientX + pointerB.clientX) / 2,
+        (pointerA.clientY + pointerB.clientY) / 2
+      );
+    }
+
+    function beginBoardPinch() {
+      const [pointerA, pointerB] = getBoardPointerPair();
+      if (!pointerA || !pointerB) return;
+
+      isPanning = false;
+      hasPannedBoard = false;
+      activePanPointerId = null;
+      viewport.classList.remove("is-panning");
+
+      isPinchingBoard = true;
+      pinchStartDistance = Math.max(1, getPointerPairDistance(pointerA, pointerB));
+      pinchStartZoom = boardZoom;
+      pinchPreviewZoom = boardZoom;
+      pinchStartPanX = panX;
+      pinchStartPanY = panY;
+      pinchStartCenter = getPointerPairCenter(pointerA, pointerB);
+      pinchCurrentCenter = pinchStartCenter;
+    }
+
+    function updateBoardPinch() {
+      if (!isPinchingBoard) return;
+
+      const [pointerA, pointerB] = getBoardPointerPair();
+      if (!pointerA || !pointerB) return;
+
+      const distance = Math.max(1, getPointerPairDistance(pointerA, pointerB));
+      pinchCurrentCenter = getPointerPairCenter(pointerA, pointerB);
+      pinchPreviewZoom = clamp(pinchStartZoom * (distance / pinchStartDistance), minZoom, maxZoom);
+
+      const previewPan = getPanForZoom(
+        pinchStartZoom,
+        pinchPreviewZoom,
+        pinchStartPanX,
+        pinchStartPanY,
+        pinchCurrentCenter
+      );
+      const previewScale = pinchPreviewZoom / pinchStartZoom;
+      updateTransform(previewScale, previewPan.x, previewPan.y);
+    }
+
+    function finishBoardPinch(shouldSave = true) {
+      if (!isPinchingBoard) return;
+
+      const nextZoom = normalizeBoardZoom(pinchPreviewZoom);
+      const nextPan = getPanForZoom(
+        pinchStartZoom,
+        nextZoom,
+        pinchStartPanX,
+        pinchStartPanY,
+        pinchCurrentCenter
+      );
+
+      isPinchingBoard = false;
+      panX = nextPan.x;
+      panY = nextPan.y;
+      boardZoom = nextZoom;
+      updateZoomControls();
+      buildGrid();
+      if (shouldSave) saveGame();
+    }
+
+    function resetBoardPanGesture() {
+      isPanning = false;
+      hasPannedBoard = false;
+      activePanPointerId = null;
+      viewport.classList.remove("is-panning");
     }
 
     function getBoardDisplaySize() {
@@ -1281,10 +1420,12 @@
 
     function getBoardScreenPosition(x, y, originX, originY) {
       const display = getBoardDisplayPosition(x, y);
+      const renderHalfTileW = zoomSize(halfTileW);
+      const renderHalfTileH = zoomSize(halfTileH);
 
       return {
-        x: snapBoardPixel((display.x - display.y) * halfTileW + originX),
-        y: snapBoardPixel((display.x + display.y) * halfTileH + originY),
+        x: snapBoardPixel((display.x - display.y) * renderHalfTileW + originX),
+        y: snapBoardPixel((display.x + display.y) * renderHalfTileH + originY),
         z: display.x + display.y
       };
     }
@@ -1958,8 +2099,8 @@
       const screen = getBoardScreenPosition(object.x, object.y, lastOriginX, lastOriginY);
 
       return {
-        x: screen.x + tileCenterX,
-        y: screen.y + itemFootY
+        x: screen.x + zoomSize(tileCenterX),
+        y: screen.y + zoomSize(itemFootY)
       };
     }
 
@@ -1979,7 +2120,7 @@
         flyer.style.top = `${source.y}px`;
         flyer.style.setProperty("--merge-dx", `${target.x - source.x}px`);
         flyer.style.setProperty("--merge-dy", `${target.y - source.y}px`);
-        flyer.style.setProperty("--merge-scale", getItemVisualScale(object.file));
+        flyer.style.setProperty("--merge-scale", getItemVisualScale(object.file) * boardZoom);
         flyer.style.animationDelay = `${index * 40}ms`;
 
         iso.appendChild(flyer);
@@ -2080,12 +2221,10 @@
 
     function getViewportPointFromBoardAnchor(anchor) {
       const viewportRect = viewport.getBoundingClientRect();
-      const viewportW = viewport.clientWidth;
-      const viewportH = viewport.clientHeight;
 
       return {
-        x: viewportRect.left + viewportW / 2 + (anchor.x - viewportW / 2) * boardZoom + panX,
-        y: viewportRect.top + viewportH / 2 + (anchor.y - viewportH / 2) * boardZoom + panY
+        x: viewportRect.left + anchor.x + panX,
+        y: viewportRect.top + anchor.y + panY
       };
     }
 
@@ -2239,10 +2378,8 @@
       const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
       const popup = document.createElement("div");
       const remaining = object.readyAt - Date.now();
-      const viewportW = viewport.clientWidth;
-      const viewportH = viewport.clientHeight;
-      const overlayX = viewportW / 2 + (screen.x + tileCenterX - viewportW / 2) * boardZoom + panX;
-      const overlayY = viewportH / 2 + (screen.y + itemFootY - viewportH / 2) * boardZoom + panY;
+      const overlayX = screen.x + zoomSize(tileCenterX) + panX;
+      const overlayY = screen.y + zoomSize(itemFootY) + panY;
 
       popup.className = "cooldown-popup";
       popup.style.left = `${overlayX}px`;
@@ -2261,16 +2398,14 @@
     function findNearestTile(clientX, clientY) {
       let nearest = null;
       let nearestDistance = Infinity;
-      const maxDistance = tileW * boardZoom * 0.72;
+      const maxDistance = zoomSize(tileW) * 0.72;
       const viewportRect = viewport.getBoundingClientRect();
-      const viewportW = viewport.clientWidth;
-      const viewportH = viewport.clientHeight;
 
       tilePlacementPoints.forEach((tile) => {
         if (!isPlaceableTile(tile.x, tile.y)) return;
 
-        const centerX = viewportRect.left + viewportW / 2 + (tile.placementX - viewportW / 2) * boardZoom + panX;
-        const centerY = viewportRect.top + viewportH / 2 + (tile.placementY - viewportH / 2) * boardZoom + panY;
+        const centerX = viewportRect.left + tile.placementX + panX;
+        const centerY = viewportRect.top + tile.placementY + panY;
         const distance = Math.hypot(clientX - centerX, clientY - centerY);
 
         if (distance < nearestDistance) {
@@ -2454,10 +2589,10 @@
           "is-sleeping",
           characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)
         );
-        wrapper.style.left = `${screen.x + tileCenterX}px`;
-        wrapper.style.top = `${screen.y + itemFootY}px`;
+        wrapper.style.left = `${screen.x + zoomSize(tileCenterX)}px`;
+        wrapper.style.top = `${screen.y + zoomSize(itemFootY)}px`;
         wrapper.style.zIndex = `${screen.z + 100}`;
-        wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file));
+        wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file) * boardZoom);
 
         hitbox.className = "board-item-hitbox";
 
@@ -2526,16 +2661,22 @@
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
       const displaySize = getBoardDisplaySize();
-      const minX = (0 - (displaySize.rows - 1)) * halfTileW;
-      const maxX = ((displaySize.cols - 1) - 0) * halfTileW;
+      const renderTileW = zoomSize(tileW);
+      const renderTileImgH = zoomSize(tileImgH);
+      const renderHalfTileW = zoomSize(halfTileW);
+      const renderHalfTileH = zoomSize(halfTileH);
+      const renderTileCenterX = zoomSize(tileCenterX);
+      const renderTileCenterY = zoomSize(tileCenterY);
+      const minX = (0 - (displaySize.rows - 1)) * renderHalfTileW;
+      const maxX = ((displaySize.cols - 1) - 0) * renderHalfTileW;
       const minY = 0;
-      const maxY = ((displaySize.cols - 1) + (displaySize.rows - 1)) * halfTileH;
+      const maxY = ((displaySize.cols - 1) + (displaySize.rows - 1)) * renderHalfTileH;
       const visualMinX = minX;
-      const visualMaxX = maxX + tileW;
+      const visualMaxX = maxX + renderTileW;
       const visualMinY = minY;
-      const visualMaxY = maxY + tileImgH;
-      const originX = viewportW / 2 - (visualMinX + visualMaxX) / 2;
-      const originY = viewportH / 2 - (visualMinY + visualMaxY) / 2;
+      const visualMaxY = maxY + renderTileImgH;
+      const originX = Math.round(viewportW / 2 - (visualMinX + visualMaxX) / 2);
+      const originY = Math.round(viewportH / 2 - (visualMinY + visualMaxY) / 2);
       lastOriginX = originX;
       lastOriginY = originY;
 
@@ -2546,8 +2687,8 @@
           if (!isBoardTile(x, y)) continue;
 
           const screen = getBoardScreenPosition(x, y, originX, originY);
-          const placementX = screen.x + tileCenterX;
-          const placementY = screen.y + tileCenterY;
+          const placementX = screen.x + renderTileCenterX;
+          const placementY = screen.y + renderTileCenterY;
           const tile = document.createElement("div");
           const isUnlocked = isBoardTileUnlocked(x, y);
 
@@ -2559,6 +2700,8 @@
             "--cube-image",
             `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
           );
+          tile.style.width = `${renderTileW}px`;
+          tile.style.height = `${renderTileImgH}px`;
           tile.style.left = `${screen.x}px`;
           tile.style.top = `${screen.y}px`;
           tile.style.zIndex = `${screen.z}`;
@@ -2579,6 +2722,8 @@
             lock.className = "tile-lock";
             lock.src = "Asset/Cloud_Lock.png";
             lock.alt = "";
+            lock.style.width = `${renderTileW}px`;
+            lock.style.height = `${renderTileImgH}px`;
             lock.style.left = `${screen.x}px`;
             lock.style.top = `${screen.y}px`;
             lock.style.zIndex = `${screen.z + 60}`;
@@ -2593,17 +2738,45 @@
     viewport.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       if (draggedObject || event.target.closest(".board-item-hitbox")) return;
-      isPanning = true;
-      hasPannedBoard = false;
+
+      activeBoardPointers.set(event.pointerId, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pointerType: event.pointerType
+      });
       startPointerX = event.clientX;
       startPointerY = event.clientY;
       startPanX = panX;
       startPanY = panY;
       viewport.setPointerCapture(event.pointerId);
+
+      if (activeBoardPointers.size >= 2) {
+        beginBoardPinch();
+        return;
+      }
+
+      isPanning = true;
+      hasPannedBoard = false;
+      activePanPointerId = event.pointerId;
     });
 
     viewport.addEventListener("pointermove", (event) => {
-      if (!isPanning) return;
+      if (!activeBoardPointers.has(event.pointerId)) return;
+
+      activeBoardPointers.set(event.pointerId, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pointerType: event.pointerType
+      });
+
+      if (activeBoardPointers.size >= 2) {
+        if (!isPinchingBoard) beginBoardPinch();
+        updateBoardPinch();
+        return;
+      }
+
+      if (!isPanning || event.pointerId !== activePanPointerId) return;
+
       const deltaX = event.clientX - startPointerX;
       const deltaY = event.clientY - startPointerY;
       const panDeadzone = event.pointerType === "touch" ? touchPanDeadzone : mousePanDeadzone;
@@ -2626,19 +2799,28 @@
 
     viewport.addEventListener("pointerup", (event) => {
       const shouldSavePan = hasPannedBoard;
-      isPanning = false;
-      hasPannedBoard = false;
-      viewport.classList.remove("is-panning");
+      activeBoardPointers.delete(event.pointerId);
+
       if (viewport.hasPointerCapture(event.pointerId)) {
         viewport.releasePointerCapture(event.pointerId);
       }
+
+      if (isPinchingBoard) {
+        finishBoardPinch(true);
+        resetBoardPanGesture();
+        return;
+      }
+
+      resetBoardPanGesture();
       if (shouldSavePan) saveGame();
     });
 
-    viewport.addEventListener("pointercancel", () => {
-      isPanning = false;
-      hasPannedBoard = false;
-      viewport.classList.remove("is-panning");
+    viewport.addEventListener("pointercancel", (event) => {
+      activeBoardPointers.delete(event.pointerId);
+      if (isPinchingBoard) {
+        finishBoardPinch(false);
+      }
+      resetBoardPanGesture();
     });
 
     spawner.addEventListener("pointerdown", (event) => {
@@ -2692,7 +2874,11 @@
     viewport.addEventListener("wheel", (event) => {
       event.preventDefault();
       const wheelZoomStep = desktopZoomStep;
-      adjustBoardZoom(event.deltaY > 0 ? -wheelZoomStep : wheelZoomStep);
+      setBoardZoom(
+        boardZoom + (event.deltaY > 0 ? -wheelZoomStep : wheelZoomStep),
+        true,
+        getViewportLocalPoint(event.clientX, event.clientY)
+      );
     }, { passive: false });
 
     orderPanel.addEventListener("pointerdown", (event) => {
