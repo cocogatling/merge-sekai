@@ -127,8 +127,8 @@
 
     .board-item {
       position: absolute;
-      width: 24px;
-      height: 23px;
+      width: calc(24px * var(--item-scale, 1));
+      height: calc(23px * var(--item-scale, 1));
       transform: translate(-50%, -100%);
       transform-origin: bottom center;
       pointer-events: auto;
@@ -971,7 +971,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.1</div>
+    <div class="version-line">version 0.0.2</div>
   </main>
 
   <script>
