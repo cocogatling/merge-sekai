@@ -547,7 +547,8 @@
     }
 
     .flip-button,
-    .projection-button {
+    .projection-button,
+    .auth-button {
       position: absolute;
       left: 22px;
       z-index: 20;
@@ -572,8 +573,13 @@
       top: 210px;
     }
 
+    .auth-button {
+      top: 256px;
+    }
+
     .flip-button:hover,
-    .projection-button:hover {
+    .projection-button:hover,
+    .auth-button:hover {
       background: rgba(54, 54, 86, 0.9);
     }
 
@@ -1220,6 +1226,11 @@
         display: none;
       }
 
+      .auth-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(14px, env(safe-area-inset-top)) + 184px);
+      }
+
       .reward-inventory-counter {
         right: max(10px, env(safe-area-inset-right));
         top: max(14px, env(safe-area-inset-top));
@@ -1275,7 +1286,8 @@
     @media (orientation: portrait) and (max-width: 480px) {
       .xp-counter,
       .reset-button,
-      .flip-button {
+      .flip-button,
+      .auth-button {
         min-height: 30px;
         padding: 0 10px;
         font-size: 13px;
@@ -1296,6 +1308,10 @@
 
       .flip-button {
         top: calc(max(12px, env(safe-area-inset-top)) + 122px);
+      }
+
+      .auth-button {
+        top: calc(max(12px, env(safe-area-inset-top)) + 162px);
       }
 
       .reward-inventory-counter {
@@ -1365,6 +1381,7 @@
       </div>
       <button id="flipButton" class="flip-button" type="button">Portrait</button>
       <button id="projectionButton" class="projection-button" type="button">Iso</button>
+      <button id="authButton" class="auth-button" type="button">Login</button>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
@@ -1419,6 +1436,7 @@
     const zoomInButton = document.getElementById("zoomInButton");
     const flipButton = document.getElementById("flipButton");
     const projectionButton = document.getElementById("projectionButton");
+    const authButton = document.getElementById("authButton");
     const xpCounter = document.getElementById("xpCounter");
     const xpCount = document.getElementById("xpCount");
     const xpDetail = document.getElementById("xpDetail");
@@ -2064,6 +2082,49 @@
 
     async function getCloudSaveUserId() {
       return await getDiscordUserId() || TEST_USER_ID;
+    }
+
+    async function updateAuthButton() {
+      const userId = await getDiscordUserId();
+      authButton.textContent = userId ? "Cloud" : "Login";
+      authButton.title = userId
+        ? "Cloud save is using your Discord login"
+        : "Log in with Discord to sync saves";
+    }
+
+    async function syncAfterAuthChange() {
+      const userId = await getDiscordUserId();
+      if (!userId) {
+        updateAuthButton();
+        return;
+      }
+
+      const cloudSave = await withTimeout(
+        loadCloudSave(userId),
+        cloudSaveTimeoutMs,
+        null
+      );
+
+      if (cloudSave) {
+        setLocalSave(cloudSave);
+        applySaveData(cloudSave);
+        normalizeBoardObjects();
+        refreshFinalCharacterRewards();
+        ensureActiveOrder();
+        buildGrid();
+        updateSpawnerCount();
+        updateSpawnerTimer();
+        updateXpCount();
+        updateZoomControls();
+        updateFlipButton();
+        updateProjectionButton();
+        updateRewardInventoryCount();
+        updateOrderPanel();
+      } else {
+        await saveCloudSave(userId, createNewSave());
+      }
+
+      updateAuthButton();
     }
 
     function withTimeout(promise, timeoutMs, fallbackValue = null) {
@@ -3697,6 +3758,17 @@
       toggleBoardProjection();
     });
 
+    authButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    authButton.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      authButton.textContent = "Login...";
+      await loginWithDiscord();
+      updateAuthButton();
+    });
+
     viewport.addEventListener("wheel", (event) => {
       event.preventDefault();
       const wheelZoomStep = desktopZoomStep;
@@ -3736,6 +3808,12 @@
     });
 
     async function startGame() {
+      if (supabaseClient) {
+        supabaseClient.auth.onAuthStateChange(() => {
+          syncAfterAuthChange();
+        });
+      }
+
       await loadGame();
       normalizeBoardObjects();
       refreshFinalCharacterRewards();
@@ -3748,6 +3826,7 @@
       updateZoomControls();
       updateFlipButton();
       updateProjectionButton();
+      updateAuthButton();
       updateRewardInventoryCount();
       updateOrderPanel();
       saveGame();
