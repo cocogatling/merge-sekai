@@ -1032,6 +1032,73 @@
       }
     }
 
+    @media (orientation: portrait) and (max-width: 480px) {
+      .xp-counter,
+      .reset-button,
+      .flip-button {
+        min-height: 30px;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
+      .zoom-button {
+        width: 30px;
+        height: 30px;
+      }
+
+      .reset-button {
+        top: calc(max(12px, env(safe-area-inset-top)) + 42px);
+      }
+
+      .zoom-controls {
+        top: calc(max(12px, env(safe-area-inset-top)) + 82px);
+      }
+
+      .flip-button {
+        top: calc(max(12px, env(safe-area-inset-top)) + 122px);
+      }
+
+      .reward-inventory-counter {
+        right: max(8px, env(safe-area-inset-right));
+        gap: 5px;
+      }
+
+      .reward-inventory-item {
+        min-width: 54px;
+        padding: 5px 7px;
+        gap: 5px;
+        font-size: 14px;
+      }
+
+      .reward-inventory-item img {
+        width: 21px;
+        height: 21px;
+      }
+
+      .order-panel {
+        width: min(216px, calc(100vw - 34px));
+        padding: 10px;
+        bottom: calc(max(14px, env(safe-area-inset-bottom)) + 92px);
+      }
+
+      .spawner {
+        width: 72px;
+        height: 72px;
+        bottom: calc(max(24px, env(safe-area-inset-bottom)) + 4px);
+      }
+
+      .spawner-count {
+        min-width: 64px;
+        font-size: 16px;
+      }
+
+      .spawner-timer {
+        bottom: -28px;
+        min-width: 74px;
+        font-size: 12px;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -1122,8 +1189,11 @@
     const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
     const tileImgH = parseFloat(styles.getPropertyValue("--tile-img-h"));
     const defaultZoom = parseFloat(styles.getPropertyValue("--zoom"));
-    const minZoom = 4;
-    const maxZoom = 10;
+    const desktopMinZoom = 4;
+    const desktopMaxZoom = 10;
+    const portraitPhoneMinZoom = 2;
+    const portraitPhoneMaxZoom = 8;
+    const portraitPhoneDefaultZoom = 3;
     const desktopZoomStep = 0.25;
     const mobileZoomStep = 1;
 
@@ -1161,7 +1231,7 @@
     const panLimit = 280;
     const mousePanDeadzone = 4;
     const touchPanDeadzone = 10;
-    let boardZoom = defaultZoom;
+    let boardZoom = getDefaultZoom();
     let isBoardFlipped = false;
     let panX = 0;
     let panY = 0;
@@ -1320,6 +1390,22 @@
       return window.matchMedia("(pointer: coarse)").matches;
     }
 
+    function isPortraitPhoneViewport() {
+      return window.matchMedia("(orientation: portrait) and (max-width: 480px)").matches;
+    }
+
+    function getMinZoom() {
+      return isPortraitPhoneViewport() ? portraitPhoneMinZoom : desktopMinZoom;
+    }
+
+    function getMaxZoom() {
+      return isPortraitPhoneViewport() ? portraitPhoneMaxZoom : desktopMaxZoom;
+    }
+
+    function getDefaultZoom() {
+      return isPortraitPhoneViewport() ? portraitPhoneDefaultZoom : defaultZoom;
+    }
+
     function snapScreenPixel(value) {
       const ratio = window.devicePixelRatio || 1;
       return Math.round(value * ratio) / ratio;
@@ -1338,7 +1424,7 @@
     }
 
     function normalizeBoardZoom(value) {
-      const clamped = clamp(value, minZoom, maxZoom);
+      const clamped = clamp(value, getMinZoom(), getMaxZoom());
       return isTouchViewport() ? Math.round(clamped) : Number(clamped.toFixed(2));
     }
 
@@ -1380,8 +1466,8 @@
     }
 
     function updateZoomControls() {
-      zoomOutButton.disabled = boardZoom <= minZoom;
-      zoomInButton.disabled = boardZoom >= maxZoom;
+      zoomOutButton.disabled = boardZoom <= getMinZoom();
+      zoomInButton.disabled = boardZoom >= getMaxZoom();
     }
 
     function setBoardZoom(value, shouldSave = true, focalPoint = null) {
@@ -1449,7 +1535,7 @@
 
       const distance = Math.max(1, getPointerPairDistance(pointerA, pointerB));
       pinchCurrentCenter = getPointerPairCenter(pointerA, pointerB);
-      pinchPreviewZoom = clamp(pinchStartZoom * (distance / pinchStartDistance), minZoom, maxZoom);
+      pinchPreviewZoom = clamp(pinchStartZoom * (distance / pinchStartDistance), getMinZoom(), getMaxZoom());
 
       const previewPan = getPanForZoom(
         pinchStartZoom,
@@ -1577,7 +1663,7 @@
         nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
         panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
         panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
-        boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(defaultZoom);
+        boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
         isBoardFlipped = save.isBoardFlipped === true;
         playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
         playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
@@ -1614,7 +1700,7 @@
       activeOrder = null;
       panX = 0;
       panY = 0;
-      boardZoom = normalizeBoardZoom(defaultZoom);
+      boardZoom = normalizeBoardZoom(getDefaultZoom());
       isBoardFlipped = false;
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
@@ -3011,7 +3097,11 @@
     setInterval(applySpawnerRestoreCatchup, 1000);
     setInterval(updateSpawnerTimer, 1000);
     setInterval(refreshSleepingCharacterItems, 1000);
-    window.addEventListener("resize", buildGrid);
+    window.addEventListener("resize", () => {
+      boardZoom = normalizeBoardZoom(boardZoom);
+      updateZoomControls();
+      buildGrid();
+    });
   </script>
 </body>
 </html>
