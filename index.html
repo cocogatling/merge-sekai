@@ -623,6 +623,47 @@
       transform: translateY(2px) scale(0.96);
     }
 
+    .order-toggle {
+      display: none;
+      position: absolute;
+      z-index: 24;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 9px;
+      background: rgba(36, 36, 58, 0.82);
+      color: #ff6096;
+      font: inherit;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(15, 34, 54, 0.28);
+    }
+
+    .order-toggle-bar {
+      display: block;
+      width: 18px;
+      height: 3px;
+      border-radius: 999px;
+      background: #ff6096;
+      box-shadow: 0 6px 0 #ff6096, 0 -6px 0 #ff6096;
+    }
+
+    .order-toggle.is-ready::after {
+      content: "!";
+      position: absolute;
+      right: -5px;
+      top: -7px;
+      width: 17px;
+      height: 17px;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: #ff1f3d;
+      color: #fff;
+      font-size: 12px;
+      line-height: 16px;
+      text-align: center;
+    }
+
     .cooldown-popup {
       position: absolute;
       z-index: 60;
@@ -980,7 +1021,7 @@
       .version-line {
         position: absolute;
         left: 50%;
-        bottom: max(8px, env(safe-area-inset-bottom));
+        bottom: max(4px, env(safe-area-inset-bottom));
         z-index: 40;
         transform: translateX(-50%);
         text-shadow: 0 2px 4px rgba(15, 34, 54, 0.5);
@@ -1027,12 +1068,30 @@
 
       .order-panel {
         left: max(12px, env(safe-area-inset-left));
-        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 78px);
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 128px);
         width: min(220px, calc(100vw - 120px));
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(10px) scale(0.98);
+        transform-origin: bottom left;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      .order-panel.is-open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
       }
 
       .spawner {
-        bottom: calc(max(28px, env(safe-area-inset-bottom)) + 8px);
+        bottom: calc(max(28px, env(safe-area-inset-bottom)) + 46px);
+      }
+
+      .order-toggle {
+        display: grid;
+        place-items: center;
+        left: calc(50% + 58px);
+        bottom: calc(max(28px, env(safe-area-inset-bottom)) + 68px);
       }
 
       .soft-fade {
@@ -1086,13 +1145,20 @@
       .order-panel {
         width: min(216px, calc(100vw - 34px));
         padding: 10px;
-        bottom: calc(max(14px, env(safe-area-inset-bottom)) + 92px);
+        bottom: calc(max(14px, env(safe-area-inset-bottom)) + 122px);
       }
 
       .spawner {
         width: 72px;
         height: 72px;
-        bottom: calc(max(24px, env(safe-area-inset-bottom)) + 4px);
+        bottom: calc(max(24px, env(safe-area-inset-bottom)) + 44px);
+      }
+
+      .order-toggle {
+        left: calc(50% + 50px);
+        bottom: calc(max(24px, env(safe-area-inset-bottom)) + 60px);
+        width: 38px;
+        height: 38px;
       }
 
       .spawner-count {
@@ -1129,6 +1195,9 @@
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
         <span id="spawnerTimer" class="spawner-timer">5:00</span>
+      </button>
+      <button id="orderToggle" class="order-toggle" type="button" aria-label="Show order" aria-expanded="false">
+        <span class="order-toggle-bar" aria-hidden="true"></span>
       </button>
       <div class="reward-inventory-counter" aria-label="Reward inventory">
         <div class="reward-inventory-item">
@@ -1190,6 +1259,7 @@
     const orderReward = document.getElementById("orderReward");
     const orderXpReward = document.getElementById("orderXpReward");
     const orderComplete = document.getElementById("orderComplete");
+    const orderToggle = document.getElementById("orderToggle");
     const orderPanel = document.querySelector(".order-panel");
     const styles = getComputedStyle(document.documentElement);
 
@@ -1297,6 +1367,8 @@
     let enaRewardInventory = 0;
     let mizukiRewardInventory = 0;
     let activeOrder = null;
+    let isOrderPanelOpen = false;
+    let wasOrderCompletable = false;
     const characterConfigs = [
       {
         id: "kanade",
@@ -1400,6 +1472,10 @@
 
     function isPortraitPhoneViewport() {
       return window.matchMedia("(orientation: portrait) and (max-width: 480px)").matches;
+    }
+
+    function isMobileOrderDrawer() {
+      return window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches;
     }
 
     function getMinZoom() {
@@ -1937,6 +2013,34 @@
       return getRewardInventory(order.file);
     }
 
+    function isActiveOrderCompletable() {
+      ensureActiveOrder();
+      return getAvailableOrderCount(activeOrder) >= activeOrder.count;
+    }
+
+    function setOrderPanelOpen(isOpen) {
+      isOrderPanelOpen = isOpen;
+      orderPanel.classList.toggle("is-open", isOpen);
+      orderToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      orderToggle.setAttribute("aria-label", isOpen ? "Hide order" : "Show order");
+    }
+
+    function syncOrderDrawerState(isCompletable) {
+      orderToggle.classList.toggle("is-ready", isCompletable);
+
+      if (!isMobileOrderDrawer()) {
+        setOrderPanelOpen(true);
+        wasOrderCompletable = isCompletable;
+        return;
+      }
+
+      if (isCompletable && !wasOrderCompletable) {
+        setOrderPanelOpen(true);
+      }
+
+      wasOrderCompletable = isCompletable;
+    }
+
     function getUnlockedCharacters() {
       return characterConfigs.filter((config) => config.unlockLevel <= playerLevel);
     }
@@ -1975,7 +2079,9 @@
       orderText.textContent = `${activeOrder.name} ${Math.min(available, activeOrder.count)}/${activeOrder.count}`;
       orderReward.textContent = `+${activeOrder.rewardCrates} crates`;
       orderXpReward.textContent = `+${activeOrder.rewardXp || 0} EXP`;
-      orderComplete.disabled = available < activeOrder.count;
+      const isCompletable = available >= activeOrder.count;
+      orderComplete.disabled = !isCompletable;
+      syncOrderDrawerState(isCompletable);
     }
 
     function removeOrderItems(order) {
@@ -1994,6 +2100,8 @@
         nextRestoreAt = null;
       }
       activeOrder = createNextOrder();
+      setOrderPanelOpen(false);
+      wasOrderCompletable = false;
       updateSpawnerCount();
       updateSpawnerTimer();
       updateOrderPanel();
@@ -3006,6 +3114,15 @@
       event.stopPropagation();
     });
 
+    orderToggle.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    orderToggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setOrderPanelOpen(!isOrderPanelOpen);
+    });
+
     xpCounter.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
     });
@@ -3109,6 +3226,10 @@
       boardZoom = normalizeBoardZoom(boardZoom);
       updateZoomControls();
       buildGrid();
+      if (isMobileOrderDrawer() && !isActiveOrderCompletable()) {
+        setOrderPanelOpen(false);
+      }
+      updateOrderPanel();
     });
 
     if ("serviceWorker" in navigator && window.isSecureContext) {
