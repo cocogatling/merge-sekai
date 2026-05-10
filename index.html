@@ -2186,7 +2186,8 @@
     function updateSpawnerCount() {
       spawnerCount.textContent = `${spawnerItems}/${maxSpawnerItems}`;
       spawner.classList.toggle("is-empty", spawnerItems === 0);
-      spawner.disabled = spawnerItems === 0;
+      spawner.disabled = false;
+      spawner.setAttribute("aria-disabled", spawnerItems === 0 ? "true" : "false");
       spawnerTimer.hidden = spawnerItems >= maxSpawnerItems;
     }
 
@@ -2353,6 +2354,11 @@
     }
 
     function updateSpawnerTimer() {
+      if (spawnerItems < maxSpawnerItems && nextRestoreAt !== null && Date.now() >= nextRestoreAt) {
+        applySpawnerRestoreCatchup();
+        return;
+      }
+
       if (spawnerItems >= maxSpawnerItems || nextRestoreAt === null) {
         spawnerTimer.textContent = "5:00";
         spawnerTimer.hidden = true;
@@ -3987,6 +3993,7 @@
     });
 
     spawner.addEventListener("click", () => {
+      applySpawnerRestoreCatchup();
       if (spawnerItems === 0) return;
       if (!spawnRandomObject()) {
         showSpaceWarning();
@@ -4022,6 +4029,10 @@
       setInterval(applySpawnerRestoreCatchup, 1000);
       setInterval(updateSpawnerTimer, 1000);
       setInterval(refreshSleepingCharacterItems, 1000);
+      window.addEventListener("focus", applySpawnerRestoreCatchup);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) applySpawnerRestoreCatchup();
+      });
       window.addEventListener("resize", scheduleViewportLayoutRefresh);
       window.visualViewport?.addEventListener("resize", scheduleViewportLayoutRefresh);
 
