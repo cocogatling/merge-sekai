@@ -947,6 +947,90 @@
       }
     }
 
+    @media (orientation: portrait) and (max-width: 900px) {
+      body {
+        min-height: 100dvh;
+        display: block;
+        overflow: hidden;
+      }
+
+      .game-shell {
+        position: relative;
+        width: 100vw;
+        height: 100dvh;
+        gap: 0;
+      }
+
+      .viewport {
+        width: 100vw;
+        height: 100dvh;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .version-line {
+        position: absolute;
+        left: 50%;
+        bottom: max(8px, env(safe-area-inset-bottom));
+        z-index: 40;
+        transform: translateX(-50%);
+        text-shadow: 0 2px 4px rgba(15, 34, 54, 0.5);
+      }
+
+      .xp-counter {
+        left: max(12px, env(safe-area-inset-left));
+        top: max(14px, env(safe-area-inset-top));
+      }
+
+      .reset-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(14px, env(safe-area-inset-top)) + 46px);
+      }
+
+      .zoom-controls {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(14px, env(safe-area-inset-top)) + 92px);
+      }
+
+      .flip-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(14px, env(safe-area-inset-top)) + 138px);
+      }
+
+      .reward-inventory-counter {
+        right: max(10px, env(safe-area-inset-right));
+        top: max(14px, env(safe-area-inset-top));
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .reward-inventory-item {
+        min-width: 64px;
+        padding: 6px 8px;
+        gap: 6px;
+        font-size: 15px;
+      }
+
+      .reward-inventory-item img {
+        width: 24px;
+        height: 24px;
+      }
+
+      .order-panel {
+        left: max(12px, env(safe-area-inset-left));
+        bottom: calc(max(16px, env(safe-area-inset-bottom)) + 78px);
+        width: min(220px, calc(100vw - 120px));
+      }
+
+      .spawner {
+        bottom: calc(max(28px, env(safe-area-inset-bottom)) + 8px);
+      }
+
+      .soft-fade {
+        background: radial-gradient(520px 780px at 50% 46%, rgba(255, 255, 255, 0.13), transparent 76%);
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -1005,7 +1089,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.5</div>
+    <div class="version-line">version 0.0.6</div>
   </main>
 
   <script>
