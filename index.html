@@ -515,28 +515,23 @@
       pointer-events: none;
     }
 
-  .reset-button {
-    position: fixed;
-    right: 22px;
-    bottom: 22px;
-    z-index: 20;
-
-    min-height: 34px;
-    padding: 0 14px;
-    border: 2px solid rgba(255, 255, 255, 0.78);
-    border-radius: 7px;
-
-    background: rgba(36, 36, 58, 0.78);
-    color: #ff6096;
-
-    font: inherit;
-    font-size: 14px;
-    font-weight: 900;
-
-    cursor: pointer;
-
-    box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
-  }
+    .reset-button {
+      position: absolute;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+    }
 
     .reset-button:hover {
       background: rgba(54, 54, 86, 0.9);
@@ -586,6 +581,71 @@
     .projection-button:hover,
     .auth-button:hover {
       background: rgba(54, 54, 86, 0.9);
+    }
+
+    .reset-modal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      background: rgba(14, 16, 28, 0.56);
+      backdrop-filter: blur(6px);
+      pointer-events: auto;
+    }
+
+    .reset-modal.is-open {
+      display: flex;
+    }
+
+    .reset-modal-box {
+      width: min(320px, calc(100% - 32px));
+      padding: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 14px;
+      background: rgba(36, 36, 58, 0.96);
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(15, 34, 54, 0.36);
+    }
+
+    .reset-modal-title {
+      color: #ff6096;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+
+    .reset-modal-text {
+      margin-bottom: 16px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .reset-modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .reset-modal-actions button {
+      min-width: 96px;
+      min-height: 36px;
+      padding: 0 14px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    #confirmResetButton {
+      color: #ff6096;
     }
 
     .zoom-button {
@@ -1213,8 +1273,10 @@
       }
 
       .reset-button {
-        left: max(12px, env(safe-area-inset-left));
-        top: calc(max(14px, env(safe-area-inset-top)) + 46px);
+        left: auto;
+        top: auto;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(max(14px, env(safe-area-inset-bottom)) + 12px);
       }
 
       .zoom-controls {
@@ -1304,7 +1366,8 @@
       }
 
       .reset-button {
-        top: calc(max(12px, env(safe-area-inset-top)) + 42px);
+        right: max(10px, env(safe-area-inset-right));
+        bottom: calc(max(12px, env(safe-area-inset-bottom)) + 10px);
       }
 
       .zoom-controls {
@@ -1366,7 +1429,6 @@
         font-size: 12px;
       }
     }
-
   </style>
 
   <script type="module">
@@ -1446,8 +1508,21 @@
         </div>
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
+
+    <div id="resetConfirmModal" class="reset-modal" aria-hidden="true">
+      <div class="reset-modal-box" role="dialog" aria-modal="true" aria-labelledby="resetModalTitle">
+        <div id="resetModalTitle" class="reset-modal-title">Do you want to reset?</div>
+        <div class="reset-modal-text">This will clear your current save.</div>
+
+        <div class="reset-modal-actions">
+          <button id="cancelResetButton">Cancel</button>
+          <button id="confirmResetButton">Reset</button>
+        </div>
+      </div>
     </div>
-    <div class="version-line">version 0.0.22</div>
+    </div>
+
+    <div class="version-line">version 0.0.23</div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -3769,14 +3844,50 @@
       event.stopPropagation();
     });
 
+    const resetConfirmModal = document.getElementById("resetConfirmModal");
+    const cancelResetButton = document.getElementById("cancelResetButton");
+    const confirmResetButton = document.getElementById("confirmResetButton");
+
+    function openResetModal() {
+      resetConfirmModal.classList.add("is-open");
+      resetConfirmModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeResetModal() {
+      resetConfirmModal.classList.remove("is-open");
+      resetConfirmModal.setAttribute("aria-hidden", "true");
+    }
+
     resetButton.addEventListener("click", () => {
-      const confirmed = confirm(
-        "Are you sure you want to reset your save?\n\nThis cannot be undone."
-      );
+      openResetModal();
+    });
 
-      if (!confirmed) return;
+    resetConfirmModal.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
 
+    resetConfirmModal.addEventListener("pointerup", (event) => {
+      event.stopPropagation();
+      if (event.target === resetConfirmModal) {
+        closeResetModal();
+      }
+    });
+
+    cancelResetButton.addEventListener("pointerup", (event) => {
+      event.stopPropagation();
+      closeResetModal();
+    });
+
+    confirmResetButton.addEventListener("pointerup", (event) => {
+      event.stopPropagation();
+      closeResetModal();
       resetGame();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && resetConfirmModal.classList.contains("is-open")) {
+        closeResetModal();
+      }
     });
 
     zoomOutButton.addEventListener("pointerdown", (event) => {
