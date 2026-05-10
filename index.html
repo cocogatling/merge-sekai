@@ -2032,6 +2032,40 @@
       }
     }
 
+    async function loginWithDiscord() {
+      if (!supabaseClient) {
+        console.error("Discord login failed: Supabase client is unavailable.");
+        return;
+      }
+
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: "https://cocogatling.github.io/merge-sekai/"
+        }
+      });
+
+      if (error) {
+        console.error("Discord login failed:", error.message);
+      }
+    }
+
+    async function getDiscordUserId() {
+      if (!supabaseClient) return null;
+
+      const { data, error } = await supabaseClient.auth.getUser();
+
+      if (error || !data.user) {
+        return null;
+      }
+
+      return data.user.id;
+    }
+
+    async function getCloudSaveUserId() {
+      return await getDiscordUserId() || TEST_USER_ID;
+    }
+
     function withTimeout(promise, timeoutMs, fallbackValue = null) {
       let timeoutId;
       const timeout = new Promise((resolve) => {
@@ -2066,7 +2100,7 @@
     function saveGame() {
       const save = createNewSave();
       setLocalSave(save);
-      saveCloudSave(TEST_USER_ID, save).catch((error) => {
+      getCloudSaveUserId().then((userId) => saveCloudSave(userId, save)).catch((error) => {
         console.warn("Cloud autosave skipped:", error.message);
       });
     }
@@ -2102,8 +2136,13 @@
 
     async function loadGame() {
       try {
+        const cloudUserId = await withTimeout(
+          getCloudSaveUserId(),
+          cloudSaveTimeoutMs,
+          TEST_USER_ID
+        );
         const cloudSave = await withTimeout(
-          loadCloudSave(TEST_USER_ID),
+          loadCloudSave(cloudUserId),
           cloudSaveTimeoutMs,
           null
         );
@@ -2117,7 +2156,7 @@
         const localSave = getLocalSave();
 
         if (localSave) {
-          saveCloudSave(TEST_USER_ID, localSave).catch((error) => {
+          saveCloudSave(cloudUserId, localSave).catch((error) => {
             console.warn("Cloud save migration skipped:", error.message);
           });
           applySaveData(localSave);
