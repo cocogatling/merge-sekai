@@ -112,11 +112,7 @@
 
     .tile.is-orthographic {
       border-radius: 2px;
-      background-image: none;
-      background-color: var(--tile-color);
-      box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-        inset 0 -4px 0 rgba(15, 34, 54, 0.12);
+      box-shadow: none;
       filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.22));
     }
 
@@ -209,6 +205,31 @@
       cursor: default;
     }
 
+    .board-item.is-centered {
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%);
+      transform-origin: center;
+    }
+
+    .board-item.is-centered .board-item-hitbox {
+      bottom: auto;
+      top: 50%;
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%) scale(var(--item-scale, 1));
+      transform-origin: center;
+    }
+
+    .board-item.is-centered .board-object {
+      bottom: auto;
+      top: 50%;
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%) scale(var(--item-scale, 1));
+      transform-origin: center;
+    }
+
     .timer-overlay {
       position: absolute;
       left: 50%;
@@ -220,6 +241,16 @@
       image-rendering: pixelated;
       transform: translate(-50%, -50%);
       pointer-events: none;
+    }
+
+    .board-item.is-centered .timer-overlay {
+      top: 68%;
+      width: 18px;
+      height: 18px;
+      padding: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 3px 7px rgba(15, 34, 54, 0.28);
     }
 
     .character-reward-popup {
@@ -265,12 +296,42 @@
       pointer-events: none;
     }
 
+    .board-item.is-centered .character-reward-popup {
+      left: 50%;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      border-width: 2px;
+      border-radius: 999px;
+      transform: translate(-50%, -108%) scale(calc(var(--item-scale, 1) * 0.56));
+      transform-origin: bottom center;
+      animation: reward-hover-centered 900ms ease-in-out infinite;
+    }
+
+    .board-item.is-centered .character-reward-popup::after {
+      display: none;
+    }
+
+    .board-item.is-centered .character-reward-popup img {
+      width: 16px;
+      height: 16px;
+    }
+
     @keyframes reward-hover {
       0%, 100% {
         transform: translate(-50%, -100%) scale(var(--item-scale, 1));
       }
       50% {
         transform: translate(-50%, -112%) scale(var(--item-scale, 1));
+      }
+    }
+
+    @keyframes reward-hover-centered {
+      0%, 100% {
+        transform: translate(-50%, -108%) scale(calc(var(--item-scale, 1) * 0.56));
+      }
+      50% {
+        transform: translate(-50%, -122%) scale(calc(var(--item-scale, 1) * 0.56));
       }
     }
 
@@ -286,6 +347,11 @@
       transform: translate(-50%, -50%) scale(var(--ghost-scale, 1));
       transform-origin: center;
       filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+    }
+
+    .drag-ghost.is-orthographic {
+      width: 32px;
+      height: 32px;
     }
 
     .merge-flyer {
@@ -330,21 +396,22 @@
     }
 
     .merge-count-popup {
-      position: absolute;
-      z-index: 905;
-      min-width: 12px;
-      height: 12px;
-      padding: 0 4px;
+      position: fixed;
+      z-index: 1105;
+      min-width: 44px;
+      height: 44px;
+      padding: 0 10px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.95);
       color: #ff6096;
-      font-size: 9px;
+      font-size: 26px;
       font-weight: 900;
-      line-height: 12px;
+      line-height: 44px;
       text-align: center;
-      transform: translate(-50%, -185%);
+      border: 4px solid rgba(255, 255, 255, 0.92);
+      transform: translate(-50%, -108%);
       pointer-events: none;
-      box-shadow: 0 3px 7px rgba(15, 34, 54, 0.28);
+      box-shadow: 0 5px 8px rgba(15, 34, 54, 0.3);
     }
 
     @keyframes merge-fly {
@@ -436,10 +503,10 @@
       gap: 6px;
     }
 
-    .flip-button {
+    .flip-button,
+    .projection-button {
       position: absolute;
       left: 22px;
-      top: 164px;
       z-index: 20;
       min-height: 34px;
       padding: 0 14px;
@@ -454,7 +521,16 @@
       box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
     }
 
-    .flip-button:hover {
+    .flip-button {
+      top: 164px;
+    }
+
+    .projection-button {
+      top: 210px;
+    }
+
+    .flip-button:hover,
+    .projection-button:hover {
       background: rgba(54, 54, 86, 0.9);
     }
 
@@ -1068,6 +1144,10 @@
         top: calc(max(14px, env(safe-area-inset-top)) + 138px);
       }
 
+      .projection-button {
+        display: none;
+      }
+
       .reward-inventory-counter {
         right: max(10px, env(safe-area-inset-right));
         top: max(14px, env(safe-area-inset-top));
@@ -1212,6 +1292,7 @@
         <button id="zoomInButton" class="zoom-button" type="button" aria-label="Zoom in">+</button>
       </div>
       <button id="flipButton" class="flip-button" type="button">9x4</button>
+      <button id="projectionButton" class="projection-button" type="button">Iso</button>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
@@ -1255,7 +1336,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.10</div>
+    <div class="version-line">version 0.0.11</div>
   </main>
 
   <script>
@@ -1265,6 +1346,7 @@
     const zoomOutButton = document.getElementById("zoomOutButton");
     const zoomInButton = document.getElementById("zoomInButton");
     const flipButton = document.getElementById("flipButton");
+    const projectionButton = document.getElementById("projectionButton");
     const xpCounter = document.getElementById("xpCounter");
     const xpCount = document.getElementById("xpCount");
     const xpDetail = document.getElementById("xpDetail");
@@ -1332,6 +1414,7 @@
     const touchPanDeadzone = 10;
     let boardZoom = getDefaultZoom();
     let isBoardFlipped = false;
+    let boardProjection = "isometric";
     let panX = 0;
     let panY = 0;
     let isPanning = false;
@@ -1360,9 +1443,19 @@
         2: 9,
         3: 27
       },
+      4: {
+        1: 3,
+        2: 9,
+        3: 27
+      },
       5: {
         1: 6,
         2: 27,
+        3: 54
+      },
+      6: {
+        1: 6,
+        2: 18,
         3: 54
       }
     };
@@ -1496,7 +1589,7 @@
     }
 
     function isOrthographicBoard() {
-      return isPortraitPhoneViewport();
+      return isPortraitPhoneViewport() || boardProjection === "orthographic";
     }
 
     function isMobileOrderDrawer() {
@@ -1530,7 +1623,7 @@
 
     function getBoardMetrics() {
       if (isOrthographicBoard()) {
-        const cellSize = zoomSize(28);
+        const cellSize = zoomSize(32);
 
         return {
           mode: "orthographic",
@@ -1540,7 +1633,7 @@
           halfTileH: cellSize / 2,
           tileCenterX: cellSize / 2,
           tileCenterY: cellSize / 2,
-          itemFootY: Math.round(cellSize * 0.72)
+          itemFootY: cellSize / 2
         };
       }
 
@@ -1757,9 +1850,29 @@
       iso.setAttribute("aria-label", `${currentSize} isometric grass cube grid`);
     }
 
+    function updateProjectionButton() {
+      const isOrtho = boardProjection === "orthographic";
+      projectionButton.textContent = isOrtho ? "Ortho" : "Iso";
+      projectionButton.setAttribute(
+        "aria-label",
+        `Switch board projection to ${isOrtho ? "isometric" : "orthographic"}`
+      );
+      iso.setAttribute(
+        "aria-label",
+        `${isBoardFlipped ? "4x9" : "9x4"} ${isOrthographicBoard() ? "orthographic" : "isometric"} grass grid`
+      );
+    }
+
     function toggleBoardOrientation() {
       isBoardFlipped = !isBoardFlipped;
       updateFlipButton();
+      buildGrid();
+      saveGame();
+    }
+
+    function toggleBoardProjection() {
+      boardProjection = boardProjection === "orthographic" ? "isometric" : "orthographic";
+      updateProjectionButton();
       buildGrid();
       saveGame();
     }
@@ -1781,6 +1894,7 @@
         panY,
         boardZoom,
         isBoardFlipped,
+        boardProjection,
         playerLevel,
         playerXp,
         rewardInventory,
@@ -1809,6 +1923,7 @@
         panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
         boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
         isBoardFlipped = save.isBoardFlipped === true;
+        boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
         playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
         playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
         rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
@@ -1846,6 +1961,7 @@
       panY = 0;
       boardZoom = normalizeBoardZoom(getDefaultZoom());
       isBoardFlipped = false;
+      boardProjection = "isometric";
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
 
@@ -1857,6 +1973,7 @@
       updateTransform();
       updateZoomControls();
       updateFlipButton();
+      updateProjectionButton();
       updateSpawnerCount();
       updateSpawnerTimer();
       updateXpCount();
@@ -2496,16 +2613,24 @@
 
       const ignoredIds = new Set([dragged.id]);
       const cluster = getOrthogonalCluster(target, dragged.file, ignoredIds);
-      const isBonusMerge = cluster.length >= 4;
-      const consumedChain = cluster.slice(0, isBonusMerge ? 4 : 2);
+      const totalMergeCount = cluster.length + 1;
+      const isSixMerge = totalMergeCount >= 6;
+      const isFourMerge = totalMergeCount === 4;
+      const isBonusMerge = !isSixMerge && totalMergeCount >= 5;
+      const mergeCount = isSixMerge ? 6 : isBonusMerge ? 5 : isFourMerge ? 4 : 3;
+      const consumedChain = cluster.slice(0, mergeCount - 1);
+      const results = isFourMerge
+        ? [result, { file: dragged.file, name: dragged.name }]
+        : Array.from({ length: mergeCount >= 5 ? 2 : 1 }, () => result);
 
       if (consumedChain.length < 2) return null;
 
       return {
         result,
+        results,
         isBonusMerge,
-        resultCount: isBonusMerge ? 2 : 1,
-        mergeCount: isBonusMerge ? 5 : 3,
+        resultCount: results.length,
+        mergeCount,
         consumedChain
       };
     }
@@ -2540,13 +2665,13 @@
         if (element) element.classList.add("is-merge-preview");
       });
 
-      const targetAnchor = getBoardAnchor(target);
+      const targetPoint = getViewportPointFromBoardAnchor(getBoardAnchor(target));
       mergeCountPopup = document.createElement("div");
       mergeCountPopup.className = "merge-count-popup";
       mergeCountPopup.textContent = `${plan.mergeCount}`;
-      mergeCountPopup.style.left = `${targetAnchor.x}px`;
-      mergeCountPopup.style.top = `${targetAnchor.y}px`;
-      iso.appendChild(mergeCountPopup);
+      mergeCountPopup.style.left = `${targetPoint.x}px`;
+      mergeCountPopup.style.top = `${targetPoint.y}px`;
+      document.body.appendChild(mergeCountPopup);
     }
 
     function getMergeItemLevel(file) {
@@ -2557,10 +2682,11 @@
     function getItemVisualScale(file) {
       const level = getMergeItemLevel(file);
       if (isOrthographicBoard()) {
-        if (level === 1) return 0.74;
-        if (level === 2) return 0.9;
-        if (level === 3) return 1.06;
-        return 1.22;
+        if (isCharacterRewardFile(file)) return 0.75;
+        if (level === 1) return 0.62;
+        if (level === 2) return 0.76;
+        if (level === 3) return 0.88;
+        return 1;
       }
 
       if (level === 1) return 0.4;
@@ -2628,7 +2754,7 @@
       const plan = getDropMergePlan(dragged, target);
       if (!plan) return false;
 
-      const { result, resultCount, mergeCount, consumedChain } = plan;
+      const { results, resultCount, mergeCount, consumedChain } = plan;
       const merging = [dragged, ...consumedChain];
       const mergingIds = new Set(merging.map((item) => item.id));
       const resultTiles = consumedChain.slice(0, resultCount);
@@ -2647,8 +2773,9 @@
         }
       }
 
-      resultTiles.forEach((tile) => {
-        const resultObject = addBoardObject(result.file, result.name, tile.x, tile.y);
+      resultTiles.forEach((tile, index) => {
+        const output = results[index];
+        const resultObject = addBoardObject(output.file, output.name, tile.x, tile.y);
         resultObject.justMerged = true;
       });
       addXp(getMergeXp(dragged.file, mergeCount), resultTiles[0], getMergeItemLevel(dragged.file) || 1);
@@ -2896,6 +3023,7 @@
 
       dragGhost = document.createElement("img");
       dragGhost.className = "drag-ghost";
+      dragGhost.classList.toggle("is-orthographic", isOrthographicBoard());
       dragGhost.src = `Asset/${object.file}`;
       dragGhost.alt = "";
       dragGhost.style.setProperty("--ghost-scale", getRenderedItemScale(object.file));
@@ -2945,6 +3073,7 @@
         wrapper.className = "board-item";
         wrapper.dataset.id = `${object.id}`;
         const characterConfig = getCharacterConfig(object);
+        wrapper.classList.toggle("is-centered", metrics.mode === "orthographic");
         wrapper.classList.toggle("is-collectible", isCollectibleCharacter(object));
         wrapper.classList.toggle("is-merge-result", object.justMerged === true);
         wrapper.classList.toggle(
@@ -3055,14 +3184,10 @@
           tile.dataset.x = `${x}`;
           tile.dataset.y = `${y}`;
           tile.dataset.tile = (x + y) % 2 === 0 ? "black" : "white";
-          if (isOrthographic) {
-            tile.style.setProperty("--tile-color", tile.dataset.tile === "black" ? "#5b6579" : "#9aa6b8");
-          } else {
-            tile.style.setProperty(
-              "--cube-image",
-              `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
-            );
-          }
+          tile.style.setProperty(
+            "--cube-image",
+            `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}${isOrthographic ? "_Ortho" : ""}.png")`
+          );
           tile.style.width = `${metrics.tileW}px`;
           tile.style.height = `${metrics.tileH}px`;
           tile.style.left = `${screen.x}px`;
@@ -3084,7 +3209,7 @@
             const lock = document.createElement("img");
             lock.className = "tile-lock";
             lock.classList.toggle("is-orthographic", isOrthographic);
-            lock.src = "Asset/Cloud_Lock.png";
+            lock.src = `Asset/Cloud_Lock${isOrthographic ? "_Ortho" : ""}.png`;
             lock.alt = "";
             lock.style.width = `${metrics.tileW}px`;
             lock.style.height = `${metrics.tileH}px`;
@@ -3244,6 +3369,15 @@
       toggleBoardOrientation();
     });
 
+    projectionButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    projectionButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleBoardProjection();
+    });
+
     viewport.addEventListener("wheel", (event) => {
       event.preventDefault();
       const wheelZoomStep = desktopZoomStep;
@@ -3293,6 +3427,7 @@
     updateXpCount();
     updateZoomControls();
     updateFlipButton();
+    updateProjectionButton();
     updateRewardInventoryCount();
     updateOrderPanel();
     saveGame();
