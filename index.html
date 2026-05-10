@@ -1540,7 +1540,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.25</div>
+    <div class="version-line">version 0.0.25.1</div>
   </main>
   <script>
     const iso = document.getElementById("iso");
@@ -1916,8 +1916,17 @@
         : `translate(${snappedX}px, ${snappedY}px) scale(${scale})`;
     }
 
+    function cancelPendingTransform() {
+      if (transformFrame !== null) {
+        cancelAnimationFrame(transformFrame);
+        transformFrame = null;
+      }
+      pendingTransform = null;
+    }
+
     function updateTransform(scale = 1, translateX = panX, translateY = panY) {
       if (!isDiscordPortraitPhoneViewport() || (!isPanning && !isPinchingBoard)) {
+        cancelPendingTransform();
         applyTransform(scale, translateX, translateY);
         return;
       }
@@ -2032,6 +2041,7 @@
       panX = nextPan.x;
       panY = nextPan.y;
       boardZoom = nextZoom;
+      cancelPendingTransform();
       updateZoomControls();
       buildGrid();
       if (shouldSave) saveGame();
@@ -2619,7 +2629,26 @@
     }
 
     function refreshSleepingCharacterItems() {
-      if (spawnedObjects.some((object) => getCharacterConfig(object) && object.file.endsWith("_Sleep.png"))) {
+      if (isPanning || isPinchingBoard || draggedObject) return;
+
+      const now = Date.now();
+      let changed = false;
+
+      spawnedObjects.forEach((object) => {
+        const config = getCharacterConfig(object);
+        if (!config || object.file !== config.sleepFile || object.readyAt === null) return;
+        if (now < object.readyAt) return;
+
+        object.readyAt = null;
+        changed = true;
+      });
+
+      if (refreshFinalCharacterRewards()) {
+        changed = true;
+      }
+
+      if (changed) {
+        saveGame();
         buildGrid();
       }
     }
@@ -3653,6 +3682,7 @@
     }
 
     function buildGrid() {
+      cancelPendingTransform();
       iso.innerHTML = "";
       tilePlacementPoints = [];
 
@@ -3674,7 +3704,7 @@
       lastOriginX = originX;
       lastOriginY = originY;
 
-      updateTransform();
+      applyTransform();
 
       for (let y = 0; y < rows; y += 1) {
         for (let x = 0; x < cols; x += 1) {
