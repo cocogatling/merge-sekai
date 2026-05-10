@@ -372,6 +372,28 @@
       gap: 6px;
     }
 
+    .flip-button {
+      position: absolute;
+      left: 22px;
+      top: 164px;
+      z-index: 20;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+    }
+
+    .flip-button:hover {
+      background: rgba(54, 54, 86, 0.9);
+    }
+
     .zoom-button {
       width: 34px;
       height: 34px;
@@ -896,7 +918,7 @@
 <body>
   <main class="game-shell">
     <div class="viewport">
-      <div id="iso" class="iso-layer" aria-label="10 by 10 isometric grass cube grid"></div>
+      <div id="iso" class="iso-layer" aria-label="9 by 4 isometric grass cube grid"></div>
       <div class="soft-fade"></div>
       <button id="xpCounter" class="xp-counter" type="button" aria-label="Player level">
         <img src="Asset/EXP_Note.png" alt="" />
@@ -908,6 +930,7 @@
         <button id="zoomOutButton" class="zoom-button" type="button" aria-label="Zoom out">-</button>
         <button id="zoomInButton" class="zoom-button" type="button" aria-label="Zoom in">+</button>
       </div>
+      <button id="flipButton" class="flip-button" type="button">9x4</button>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
@@ -948,7 +971,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0</div>
+    <div class="version-line">version 0.0.1</div>
   </main>
 
   <script>
@@ -957,6 +980,7 @@
     const resetButton = document.getElementById("resetButton");
     const zoomOutButton = document.getElementById("zoomOutButton");
     const zoomInButton = document.getElementById("zoomInButton");
+    const flipButton = document.getElementById("flipButton");
     const xpCounter = document.getElementById("xpCounter");
     const xpCount = document.getElementById("xpCount");
     const xpDetail = document.getElementById("xpDetail");
@@ -1016,6 +1040,7 @@
     const spawnPadding = 1;
     const panLimit = 280;
     let boardZoom = defaultZoom;
+    let isBoardFlipped = false;
     let panX = 0;
     let panY = 0;
     let isPanning = false;
@@ -1178,6 +1203,48 @@
       setBoardZoom(Number((boardZoom + delta).toFixed(2)));
     }
 
+    function getBoardDisplaySize() {
+      return {
+        rows: isBoardFlipped ? cols : rows,
+        cols: isBoardFlipped ? rows : cols
+      };
+    }
+
+    function getBoardDisplayPosition(x, y) {
+      return isBoardFlipped
+        ? { x: y, y: x }
+        : { x, y };
+    }
+
+    function getBoardScreenPosition(x, y, originX, originY) {
+      const display = getBoardDisplayPosition(x, y);
+
+      return {
+        x: (display.x - display.y) * halfTileW + originX,
+        y: (display.x + display.y) * halfTileH + originY,
+        z: display.x + display.y
+      };
+    }
+
+    function updateFlipButton() {
+      const currentSize = isBoardFlipped ? "4x9" : "9x4";
+      const nextSize = isBoardFlipped ? "9 by 4" : "4 by 9";
+
+      flipButton.textContent = currentSize;
+      flipButton.setAttribute(
+        "aria-label",
+        `Flip board to ${nextSize}`
+      );
+      iso.setAttribute("aria-label", `${currentSize} isometric grass cube grid`);
+    }
+
+    function toggleBoardOrientation() {
+      isBoardFlipped = !isBoardFlipped;
+      updateFlipButton();
+      buildGrid();
+      saveGame();
+    }
+
     function updateSpawnerCount() {
       spawnerCount.textContent = `${spawnerItems}/${maxSpawnerItems}`;
       spawner.classList.toggle("is-empty", spawnerItems === 0);
@@ -1194,6 +1261,7 @@
         panX,
         panY,
         boardZoom,
+        isBoardFlipped,
         playerLevel,
         playerXp,
         rewardInventory,
@@ -1221,6 +1289,7 @@
         panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
         panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
         boardZoom = Number.isFinite(save.boardZoom) ? clamp(save.boardZoom, minZoom, maxZoom) : defaultZoom;
+        isBoardFlipped = save.isBoardFlipped === true;
         playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
         playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
         rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
@@ -1257,6 +1326,7 @@
       panX = 0;
       panY = 0;
       boardZoom = defaultZoom;
+      isBoardFlipped = false;
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
 
@@ -1267,6 +1337,7 @@
 
       updateTransform();
       updateZoomControls();
+      updateFlipButton();
       updateSpawnerCount();
       updateSpawnerTimer();
       updateXpCount();
@@ -1821,12 +1892,11 @@
     }
 
     function getBoardAnchor(object) {
-      const screenX = (object.x - object.y) * halfTileW + lastOriginX;
-      const screenY = (object.x + object.y) * halfTileH + lastOriginY;
+      const screen = getBoardScreenPosition(object.x, object.y, lastOriginX, lastOriginY);
 
       return {
-        x: screenX + tileCenterX,
-        y: screenY + itemFootY
+        x: screen.x + tileCenterX,
+        y: screen.y + itemFootY
       };
     }
 
@@ -2103,14 +2173,13 @@
         clearTimeout(cooldownPopupTimeout);
       }
 
-      const screenX = (object.x - object.y) * halfTileW + originX;
-      const screenY = (object.x + object.y) * halfTileH + originY;
+      const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
       const popup = document.createElement("div");
       const remaining = object.readyAt - Date.now();
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
-      const overlayX = viewportW / 2 + (screenX + tileCenterX - viewportW / 2) * boardZoom + panX;
-      const overlayY = viewportH / 2 + (screenY + itemFootY - viewportH / 2) * boardZoom + panY;
+      const overlayX = viewportW / 2 + (screen.x + tileCenterX - viewportW / 2) * boardZoom + panX;
+      const overlayY = viewportH / 2 + (screen.y + itemFootY - viewportH / 2) * boardZoom + panY;
 
       popup.className = "cooldown-popup";
       popup.style.left = `${overlayX}px`;
@@ -2309,8 +2378,7 @@
 
     function renderSpawnedObjects(originX, originY) {
       spawnedObjects.forEach((object) => {
-        const screenX = (object.x - object.y) * halfTileW + originX;
-        const screenY = (object.x + object.y) * halfTileH + originY;
+        const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
         const wrapper = document.createElement("div");
         const img = document.createElement("img");
 
@@ -2323,9 +2391,9 @@
           "is-sleeping",
           characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)
         );
-        wrapper.style.left = `${screenX + tileCenterX}px`;
-        wrapper.style.top = `${screenY + itemFootY}px`;
-        wrapper.style.zIndex = `${object.x + object.y + 100}`;
+        wrapper.style.left = `${screen.x + tileCenterX}px`;
+        wrapper.style.top = `${screen.y + itemFootY}px`;
+        wrapper.style.zIndex = `${screen.z + 100}`;
         wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file));
 
         img.className = "board-object";
@@ -2391,10 +2459,11 @@
 
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
-      const minX = (0 - (rows - 1)) * halfTileW;
-      const maxX = ((cols - 1) - 0) * halfTileW;
+      const displaySize = getBoardDisplaySize();
+      const minX = (0 - (displaySize.rows - 1)) * halfTileW;
+      const maxX = ((displaySize.cols - 1) - 0) * halfTileW;
       const minY = 0;
-      const maxY = ((cols - 1) + (rows - 1)) * halfTileH;
+      const maxY = ((displaySize.cols - 1) + (displaySize.rows - 1)) * halfTileH;
       const visualMinX = minX;
       const visualMaxX = maxX + tileW;
       const visualMinY = minY;
@@ -2410,10 +2479,9 @@
         for (let x = 0; x < cols; x += 1) {
           if (!isBoardTile(x, y)) continue;
 
-          const screenX = (x - y) * halfTileW + originX;
-          const screenY = (x + y) * halfTileH + originY;
-          const placementX = screenX + tileCenterX;
-          const placementY = screenY + tileCenterY;
+          const screen = getBoardScreenPosition(x, y, originX, originY);
+          const placementX = screen.x + tileCenterX;
+          const placementY = screen.y + tileCenterY;
           const tile = document.createElement("div");
           const isUnlocked = isBoardTileUnlocked(x, y);
 
@@ -2425,9 +2493,9 @@
             "--cube-image",
             `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
           );
-          tile.style.left = `${screenX}px`;
-          tile.style.top = `${screenY}px`;
-          tile.style.zIndex = `${x + y}`;
+          tile.style.left = `${screen.x}px`;
+          tile.style.top = `${screen.y}px`;
+          tile.style.zIndex = `${screen.z}`;
           tile.title = isUnlocked
             ? `Tile ${x + 1}, ${y + 1}`
             : `Unlocks at Lv ${boardUnlockLevels[y][x]}`;
@@ -2445,9 +2513,9 @@
             lock.className = "tile-lock";
             lock.src = "Asset/Cloud_Lock.png";
             lock.alt = "";
-            lock.style.left = `${screenX}px`;
-            lock.style.top = `${screenY}px`;
-            lock.style.zIndex = `${x + y + 60}`;
+            lock.style.left = `${screen.x}px`;
+            lock.style.top = `${screen.y}px`;
+            lock.style.zIndex = `${screen.z + 60}`;
             iso.appendChild(lock);
           }
         }
@@ -2527,6 +2595,15 @@
       adjustBoardZoom(zoomStep);
     });
 
+    flipButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    flipButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleBoardOrientation();
+    });
+
     viewport.addEventListener("wheel", (event) => {
       event.preventDefault();
       adjustBoardZoom(event.deltaY > 0 ? -zoomStep : zoomStep);
@@ -2570,6 +2647,7 @@
     updateSpawnerTimer();
     updateXpCount();
     updateZoomControls();
+    updateFlipButton();
     updateRewardInventoryCount();
     updateOrderPanel();
     saveGame();
