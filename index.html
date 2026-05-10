@@ -1408,7 +1408,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.15</div>
+    <div class="version-line">version 0.0.16</div>
   </main>
 
   <script>
@@ -1437,10 +1437,12 @@
     const orderToggle = document.getElementById("orderToggle");
     const orderPanel = document.querySelector(".order-panel");
     const styles = getComputedStyle(document.documentElement);
-    const supabaseClient = supabase.createClient(
-      "https://hrxkflnvevjhzqiukamp.supabase.co/",
-      "sb_publishable_lu0S5haHms8QgDlYyjO8CA_LtMVeW0D"
-    );
+    const supabaseClient = window.supabase
+      ? supabase.createClient(
+        "https://hrxkflnvevjhzqiukamp.supabase.co/",
+        "sb_publishable_lu0S5haHms8QgDlYyjO8CA_LtMVeW0D"
+      )
+      : null;
 
     const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
     const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
@@ -1488,6 +1490,7 @@
     const panLimit = 280;
     const mousePanDeadzone = 4;
     const touchPanDeadzone = 10;
+    const cloudSaveTimeoutMs = 2200;
     let boardZoom = getDefaultZoom();
     let isBoardFlipped = getDefaultBoardFlipped();
     let boardProjection = "orthographic";
@@ -1995,6 +1998,8 @@
     const TEST_USER_ID = "test-user-001";
 
     async function loadCloudSave(userId) {
+      if (!supabaseClient) return null;
+
       const { data, error } = await supabaseClient
         .from("saves")
         .select("save_data")
@@ -2010,6 +2015,8 @@
     }
 
     async function saveCloudSave(userId, saveData) {
+      if (!supabaseClient) return;
+
       const { error } = await supabaseClient
         .from("saves")
         .upsert({
@@ -2025,8 +2032,17 @@
       }
     }
 
-    function saveGame() {
-      const save = {
+    function withTimeout(promise, timeoutMs, fallbackValue = null) {
+      let timeoutId;
+      const timeout = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallbackValue), timeoutMs);
+      });
+
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+    }
+
+    function createNewSave() {
+      return {
         version: 1,
         spawnerItems,
         nextRestoreAt,
@@ -2045,43 +2061,73 @@
         activeOrder,
         spawnedObjects
       };
-
-      setLocalSave(save);
     }
 
-    function loadGame() {
-      try {
-        const save = getLocalSave();
-        if (!save) return;
+    function saveGame() {
+      const save = createNewSave();
+      setLocalSave(save);
+      saveCloudSave(TEST_USER_ID, save).catch((error) => {
+        console.warn("Cloud autosave skipped:", error.message);
+      });
+    }
 
-        spawnerItems = Number.isFinite(save.spawnerItems)
-          ? clamp(save.spawnerItems, 0, maxSpawnerItems)
-          : maxSpawnerItems;
-        nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
-        nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
-        panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
-        panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
-        boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
-        isBoardFlipped = save.isBoardFlipped === true;
-        boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
-        playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
-        playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
-        rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
-        mafuyuRewardInventory = Number.isFinite(save.mafuyuRewardInventory) ? save.mafuyuRewardInventory : 0;
-        enaRewardInventory = Number.isFinite(save.enaRewardInventory) ? save.enaRewardInventory : 0;
-        mizukiRewardInventory = Number.isFinite(save.mizukiRewardInventory) ? save.mizukiRewardInventory : 0;
-        activeOrder = save.activeOrder || null;
-        spawnedObjects.splice(
-          0,
-          spawnedObjects.length,
-          ...(Array.isArray(save.spawnedObjects) ? save.spawnedObjects : [])
+    function applySaveData(save) {
+      spawnerItems = Number.isFinite(save.spawnerItems)
+        ? clamp(save.spawnerItems, 0, maxSpawnerItems)
+        : maxSpawnerItems;
+      nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
+      nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
+      panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
+      panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+      boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
+      isBoardFlipped = save.isBoardFlipped === true;
+      boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
+      playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
+      playerLevel = Number.isFinite(save.playerLevel) ? Math.max(1, save.playerLevel) : getLevelForXp(playerXp);
+      rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
+      mafuyuRewardInventory = Number.isFinite(save.mafuyuRewardInventory) ? save.mafuyuRewardInventory : 0;
+      enaRewardInventory = Number.isFinite(save.enaRewardInventory) ? save.enaRewardInventory : 0;
+      mizukiRewardInventory = Number.isFinite(save.mizukiRewardInventory) ? save.mizukiRewardInventory : 0;
+      activeOrder = save.activeOrder || null;
+      spawnedObjects.splice(
+        0,
+        spawnedObjects.length,
+        ...(Array.isArray(save.spawnedObjects) ? save.spawnedObjects : [])
+      );
+      nextObjectId = Math.max(
+        nextObjectId,
+        spawnedObjects.reduce((maxId, object) => Math.max(maxId, object.id || 0), 0) + 1
+      );
+    }
+
+    async function loadGame() {
+      try {
+        const cloudSave = await withTimeout(
+          loadCloudSave(TEST_USER_ID),
+          cloudSaveTimeoutMs,
+          null
         );
-        nextObjectId = Math.max(
-          nextObjectId,
-          spawnedObjects.reduce((maxId, object) => Math.max(maxId, object.id || 0), 0) + 1
-        );
+
+        if (cloudSave) {
+          setLocalSave(cloudSave);
+          applySaveData(cloudSave);
+          return cloudSave;
+        }
+
+        const localSave = getLocalSave();
+
+        if (localSave) {
+          saveCloudSave(TEST_USER_ID, localSave).catch((error) => {
+            console.warn("Cloud save migration skipped:", error.message);
+          });
+          applySaveData(localSave);
+          return localSave;
+        }
+
+        return createNewSave();
       } catch (error) {
         console.warn("Could not load saved game.", error);
+        return createNewSave();
       }
     }
 
@@ -3650,41 +3696,45 @@
       saveGame();
     });
 
-    loadGame();
-    normalizeBoardObjects();
-    refreshFinalCharacterRewards();
-    ensureActiveOrder();
-    applySpawnerRestoreCatchup();
-    buildGrid();
-    updateSpawnerCount();
-    updateSpawnerTimer();
-    updateXpCount();
-    updateZoomControls();
-    updateFlipButton();
-    updateProjectionButton();
-    updateRewardInventoryCount();
-    updateOrderPanel();
-    saveGame();
-    setInterval(applySpawnerRestoreCatchup, 1000);
-    setInterval(updateSpawnerTimer, 1000);
-    setInterval(refreshSleepingCharacterItems, 1000);
-    window.addEventListener("resize", () => {
-      boardZoom = normalizeBoardZoom(boardZoom);
-      updateZoomControls();
+    async function startGame() {
+      await loadGame();
+      normalizeBoardObjects();
+      refreshFinalCharacterRewards();
+      ensureActiveOrder();
+      applySpawnerRestoreCatchup();
       buildGrid();
-      if (isMobileOrderDrawer() && !isActiveOrderCompletable()) {
-        setOrderPanelOpen(false);
-      }
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      updateXpCount();
+      updateZoomControls();
+      updateFlipButton();
+      updateProjectionButton();
+      updateRewardInventoryCount();
       updateOrderPanel();
-    });
-
-    if ("serviceWorker" in navigator && window.isSecureContext) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js").catch((error) => {
-          console.warn("Could not register service worker.", error);
-        });
+      saveGame();
+      setInterval(applySpawnerRestoreCatchup, 1000);
+      setInterval(updateSpawnerTimer, 1000);
+      setInterval(refreshSleepingCharacterItems, 1000);
+      window.addEventListener("resize", () => {
+        boardZoom = normalizeBoardZoom(boardZoom);
+        updateZoomControls();
+        buildGrid();
+        if (isMobileOrderDrawer() && !isActiveOrderCompletable()) {
+          setOrderPanelOpen(false);
+        }
+        updateOrderPanel();
       });
+
+      if ("serviceWorker" in navigator && window.isSecureContext) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").catch((error) => {
+            console.warn("Could not register service worker.", error);
+          });
+        });
+      }
     }
+
+    startGame();
   </script>
 </body>
 </html>
