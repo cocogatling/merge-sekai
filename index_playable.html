@@ -363,6 +363,39 @@
       background: rgba(54, 54, 86, 0.9);
     }
 
+    .zoom-controls {
+      position: absolute;
+      left: 22px;
+      top: 118px;
+      z-index: 20;
+      display: flex;
+      gap: 6px;
+    }
+
+    .zoom-button {
+      width: 34px;
+      height: 34px;
+      border: 2px solid rgba(255, 255, 255, 0.78);
+      border-radius: 7px;
+      background: rgba(36, 36, 58, 0.78);
+      color: #ff6096;
+      font: inherit;
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+    }
+
+    .zoom-button:hover {
+      background: rgba(54, 54, 86, 0.9);
+    }
+
+    .zoom-button:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+
     .xp-counter {
       position: absolute;
       left: 22px;
@@ -871,6 +904,10 @@
         <span id="xpDetail" class="xp-detail" hidden>0 EXP</span>
       </button>
       <button id="resetButton" class="reset-button" type="button">Reset</button>
+      <div class="zoom-controls" aria-label="Board zoom controls">
+        <button id="zoomOutButton" class="zoom-button" type="button" aria-label="Zoom out">-</button>
+        <button id="zoomInButton" class="zoom-button" type="button" aria-label="Zoom in">+</button>
+      </div>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
@@ -911,13 +948,15 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.4</div>
+    <div class="version-line">version 0.0</div>
   </main>
 
   <script>
     const iso = document.getElementById("iso");
     const viewport = document.querySelector(".viewport");
     const resetButton = document.getElementById("resetButton");
+    const zoomOutButton = document.getElementById("zoomOutButton");
+    const zoomInButton = document.getElementById("zoomInButton");
     const xpCounter = document.getElementById("xpCounter");
     const xpCount = document.getElementById("xpCount");
     const xpDetail = document.getElementById("xpDetail");
@@ -939,7 +978,10 @@
     const tileW = parseFloat(styles.getPropertyValue("--tile-w"));
     const tileStepY = parseFloat(styles.getPropertyValue("--tile-h"));
     const tileImgH = parseFloat(styles.getPropertyValue("--tile-img-h"));
-    const zoom = parseFloat(styles.getPropertyValue("--zoom"));
+    const defaultZoom = parseFloat(styles.getPropertyValue("--zoom"));
+    const minZoom = 4;
+    const maxZoom = 10;
+    const zoomStep = 0.25;
 
     const boardShape = [
       "XXXX",
@@ -973,9 +1015,13 @@
     const saveKey = "merge-sekai-save-v1";
     const spawnPadding = 1;
     const panLimit = 280;
+    let boardZoom = defaultZoom;
+    let panX = 0;
     let panY = 0;
     let isPanning = false;
+    let startPointerX = 0;
     let startPointerY = 0;
+    let startPanX = 0;
     let startPanY = 0;
     const maxSpawnerItems = 60;
     const restoreAmount = 5;
@@ -1113,7 +1159,23 @@
     }
 
     function updateTransform() {
-      iso.style.transform = `translateY(${panY}px) scale(${zoom})`;
+      iso.style.transform = `translate(${panX}px, ${panY}px) scale(${boardZoom})`;
+    }
+
+    function updateZoomControls() {
+      zoomOutButton.disabled = boardZoom <= minZoom;
+      zoomInButton.disabled = boardZoom >= maxZoom;
+    }
+
+    function setBoardZoom(value, shouldSave = true) {
+      boardZoom = clamp(value, minZoom, maxZoom);
+      updateTransform();
+      updateZoomControls();
+      if (shouldSave) saveGame();
+    }
+
+    function adjustBoardZoom(delta) {
+      setBoardZoom(Number((boardZoom + delta).toFixed(2)));
     }
 
     function updateSpawnerCount() {
@@ -1129,7 +1191,9 @@
         spawnerItems,
         nextRestoreAt,
         nextObjectId,
+        panX,
         panY,
+        boardZoom,
         playerLevel,
         playerXp,
         rewardInventory,
@@ -1154,7 +1218,9 @@
           : maxSpawnerItems;
         nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
         nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
+        panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
         panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+        boardZoom = Number.isFinite(save.boardZoom) ? clamp(save.boardZoom, minZoom, maxZoom) : defaultZoom;
         playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
         playerLevel = Number.isFinite(save.playerLevel) ? save.playerLevel : getLevelForXp(playerXp);
         rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
@@ -1188,7 +1254,9 @@
       enaRewardInventory = 0;
       mizukiRewardInventory = 0;
       activeOrder = null;
+      panX = 0;
       panY = 0;
+      boardZoom = defaultZoom;
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
 
@@ -1198,6 +1266,7 @@
       }
 
       updateTransform();
+      updateZoomControls();
       updateSpawnerCount();
       updateSpawnerTimer();
       updateXpCount();
@@ -1882,8 +1951,8 @@
       const viewportH = viewport.clientHeight;
 
       return {
-        x: viewportRect.left + viewportW / 2 + (anchor.x - viewportW / 2) * zoom,
-        y: viewportRect.top + viewportH / 2 + (anchor.y - viewportH / 2) * zoom + panY
+        x: viewportRect.left + viewportW / 2 + (anchor.x - viewportW / 2) * boardZoom + panX,
+        y: viewportRect.top + viewportH / 2 + (anchor.y - viewportH / 2) * boardZoom + panY
       };
     }
 
@@ -2040,8 +2109,8 @@
       const remaining = object.readyAt - Date.now();
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
-      const overlayX = viewportW / 2 + (screenX + tileCenterX - viewportW / 2) * zoom;
-      const overlayY = viewportH / 2 + (screenY + itemFootY - viewportH / 2) * zoom + panY;
+      const overlayX = viewportW / 2 + (screenX + tileCenterX - viewportW / 2) * boardZoom + panX;
+      const overlayY = viewportH / 2 + (screenY + itemFootY - viewportH / 2) * boardZoom + panY;
 
       popup.className = "cooldown-popup";
       popup.style.left = `${overlayX}px`;
@@ -2060,7 +2129,7 @@
     function findNearestTile(clientX, clientY) {
       let nearest = null;
       let nearestDistance = Infinity;
-      const maxDistance = tileW * zoom * 0.72;
+      const maxDistance = tileW * boardZoom * 0.72;
       const viewportRect = viewport.getBoundingClientRect();
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
@@ -2068,8 +2137,8 @@
       tilePlacementPoints.forEach((tile) => {
         if (!isPlaceableTile(tile.x, tile.y)) return;
 
-        const centerX = viewportRect.left + viewportW / 2 + (tile.placementX - viewportW / 2) * zoom;
-        const centerY = viewportRect.top + viewportH / 2 + (tile.placementY - viewportH / 2) * zoom + panY;
+        const centerX = viewportRect.left + viewportW / 2 + (tile.placementX - viewportW / 2) * boardZoom + panX;
+        const centerY = viewportRect.top + viewportH / 2 + (tile.placementY - viewportH / 2) * boardZoom + panY;
         const distance = Math.hypot(clientX - centerX, clientY - centerY);
 
         if (distance < nearestDistance) {
@@ -2201,8 +2270,8 @@
       dragGhost.className = "drag-ghost";
       dragGhost.src = `Asset/${object.file}`;
       dragGhost.alt = "";
-      dragGhost.style.width = `${24 * zoom * getItemVisualScale(object.file)}px`;
-      dragGhost.style.height = `${23 * zoom * getItemVisualScale(object.file)}px`;
+      dragGhost.style.width = `${24 * boardZoom * getItemVisualScale(object.file)}px`;
+      dragGhost.style.height = `${23 * boardZoom * getItemVisualScale(object.file)}px`;
       document.body.appendChild(dragGhost);
       moveDragGhost(event.clientX, event.clientY);
 
@@ -2390,7 +2459,9 @@
     viewport.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       isPanning = true;
+      startPointerX = event.clientX;
       startPointerY = event.clientY;
+      startPanX = panX;
       startPanY = panY;
       viewport.classList.add("is-panning");
       viewport.setPointerCapture(event.pointerId);
@@ -2398,7 +2469,9 @@
 
     viewport.addEventListener("pointermove", (event) => {
       if (!isPanning) return;
+      const deltaX = event.clientX - startPointerX;
       const deltaY = event.clientY - startPointerY;
+      panX = clamp(startPanX + deltaX, -panLimit, panLimit);
       panY = clamp(startPanY + deltaY, -panLimit, panLimit);
       updateTransform();
     });
@@ -2435,6 +2508,29 @@
     resetButton.addEventListener("click", () => {
       resetGame();
     });
+
+    zoomOutButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    zoomOutButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      adjustBoardZoom(-zoomStep);
+    });
+
+    zoomInButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    zoomInButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      adjustBoardZoom(zoomStep);
+    });
+
+    viewport.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      adjustBoardZoom(event.deltaY > 0 ? -zoomStep : zoomStep);
+    }, { passive: false });
 
     orderPanel.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -2473,6 +2569,7 @@
     updateSpawnerCount();
     updateSpawnerTimer();
     updateXpCount();
+    updateZoomControls();
     updateRewardInventoryCount();
     updateOrderPanel();
     saveGame();
