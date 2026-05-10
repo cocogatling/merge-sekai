@@ -47,6 +47,9 @@
         inset 0 0 0 2px rgba(255, 255, 255, 0.35);
       cursor: grab;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
       touch-action: none;
     }
 
@@ -67,6 +70,7 @@
       position: absolute;
       inset: 0;
       transform-origin: 50% 50%;
+      will-change: transform;
     }
 
     .tile {
@@ -113,6 +117,7 @@
       transform: translate(-50%, -100%);
       transform-origin: bottom center;
       filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      will-change: transform;
     }
 
     .board-object.is-dragging {
@@ -127,12 +132,29 @@
 
     .board-item {
       position: absolute;
-      width: calc(24px * var(--item-scale, 1));
-      height: calc(23px * var(--item-scale, 1));
+      width: 24px;
+      height: 23px;
       transform: translate(-50%, -100%);
       transform-origin: bottom center;
-      pointer-events: auto;
+      pointer-events: none;
       cursor: grab;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+
+    .board-item-hitbox {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: 24px;
+      height: 23px;
+      transform: translateX(-50%) scale(var(--item-scale, 1));
+      transform-origin: bottom center;
+      pointer-events: auto;
+      cursor: inherit;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
     }
 
     .board-item .board-object {
@@ -217,13 +239,15 @@
     .drag-ghost {
       position: fixed;
       z-index: 1000;
-      width: 96px;
-      height: 92px;
+      width: 24px;
+      height: 23px;
       object-fit: contain;
       image-rendering: pixelated;
       pointer-events: none;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) scale(var(--ghost-scale, 1));
+      transform-origin: center;
       filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+      will-change: transform;
     }
 
     .merge-flyer {
@@ -971,7 +995,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.2</div>
+    <div class="version-line">version 0.0.3</div>
   </main>
 
   <script>
@@ -1039,11 +1063,14 @@
     const saveKey = "merge-sekai-save-v1";
     const spawnPadding = 1;
     const panLimit = 280;
+    const mousePanDeadzone = 4;
+    const touchPanDeadzone = 10;
     let boardZoom = defaultZoom;
     let isBoardFlipped = false;
     let panX = 0;
     let panY = 0;
     let isPanning = false;
+    let hasPannedBoard = false;
     let startPointerX = 0;
     let startPointerY = 0;
     let startPanX = 0;
@@ -2333,14 +2360,13 @@
       dragStartClientX = event.clientX;
       dragStartClientY = event.clientY;
       didDragMove = false;
-      event.currentTarget.classList.add("is-dragging");
+      event.currentTarget.closest(".board-item")?.classList.add("is-dragging");
 
       dragGhost = document.createElement("img");
       dragGhost.className = "drag-ghost";
       dragGhost.src = `Asset/${object.file}`;
       dragGhost.alt = "";
-      dragGhost.style.width = `${24 * boardZoom * getItemVisualScale(object.file)}px`;
-      dragGhost.style.height = `${23 * boardZoom * getItemVisualScale(object.file)}px`;
+      dragGhost.style.setProperty("--ghost-scale", boardZoom * getItemVisualScale(object.file));
       document.body.appendChild(dragGhost);
       moveDragGhost(event.clientX, event.clientY);
 
@@ -2380,6 +2406,7 @@
       spawnedObjects.forEach((object) => {
         const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
         const wrapper = document.createElement("div");
+        const hitbox = document.createElement("div");
         const img = document.createElement("img");
 
         wrapper.className = "board-item";
@@ -2396,6 +2423,8 @@
         wrapper.style.zIndex = `${screen.z + 100}`;
         wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file));
 
+        hitbox.className = "board-item-hitbox";
+
         img.className = "board-object";
         img.src = `Asset/${object.file}`;
         img.alt = object.name;
@@ -2403,7 +2432,7 @@
         img.dataset.x = `${object.x}`;
         img.dataset.y = `${object.y}`;
 
-        wrapper.addEventListener("click", (event) => {
+        hitbox.addEventListener("click", (event) => {
           event.stopPropagation();
           if (isCharacterRewardFile(object.file)) {
             collectBoardRewards(object.file);
@@ -2411,7 +2440,7 @@
           }
           if (characterConfig && (object.file === characterConfig.finalFile || object.file === characterConfig.sleepFile)) return;
         });
-        wrapper.addEventListener("pointerdown", (event) => {
+        hitbox.addEventListener("pointerdown", (event) => {
           if (isCharacterRewardFile(object.file)) {
             event.preventDefault();
             event.stopPropagation();
@@ -2421,6 +2450,7 @@
           startObjectDrag(event, object);
         });
 
+        wrapper.appendChild(hitbox);
         wrapper.appendChild(img);
 
         if (characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)) {
@@ -2526,12 +2556,13 @@
 
     viewport.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
+      if (draggedObject || event.target.closest(".board-item-hitbox")) return;
       isPanning = true;
+      hasPannedBoard = false;
       startPointerX = event.clientX;
       startPointerY = event.clientY;
       startPanX = panX;
       startPanY = panY;
-      viewport.classList.add("is-panning");
       viewport.setPointerCapture(event.pointerId);
     });
 
@@ -2539,20 +2570,38 @@
       if (!isPanning) return;
       const deltaX = event.clientX - startPointerX;
       const deltaY = event.clientY - startPointerY;
+      const panDeadzone = event.pointerType === "touch" ? touchPanDeadzone : mousePanDeadzone;
+
+      if (!hasPannedBoard) {
+        if (Math.hypot(deltaX, deltaY) < panDeadzone) return;
+        hasPannedBoard = true;
+        startPointerX = event.clientX;
+        startPointerY = event.clientY;
+        startPanX = panX;
+        startPanY = panY;
+        viewport.classList.add("is-panning");
+        return;
+      }
+
       panX = clamp(startPanX + deltaX, -panLimit, panLimit);
       panY = clamp(startPanY + deltaY, -panLimit, panLimit);
       updateTransform();
     });
 
     viewport.addEventListener("pointerup", (event) => {
+      const shouldSavePan = hasPannedBoard;
       isPanning = false;
+      hasPannedBoard = false;
       viewport.classList.remove("is-panning");
-      viewport.releasePointerCapture(event.pointerId);
-      saveGame();
+      if (viewport.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+      if (shouldSavePan) saveGame();
     });
 
     viewport.addEventListener("pointercancel", () => {
       isPanning = false;
+      hasPannedBoard = false;
       viewport.classList.remove("is-panning");
     });
 
