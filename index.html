@@ -110,6 +110,21 @@
       opacity: 1;
     }
 
+    .tile.is-orthographic {
+      border-radius: 2px;
+      background-image: none;
+      background-color: var(--tile-color);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        inset 0 -4px 0 rgba(15, 34, 54, 0.12);
+      filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.22));
+    }
+
+    .tile.is-orthographic::after {
+      clip-path: none;
+      border-radius: inherit;
+    }
+
     .tile-lock {
       position: absolute;
       width: var(--tile-w);
@@ -119,6 +134,12 @@
       image-rendering: pixelated;
       pointer-events: none;
       filter: drop-shadow(0 6px 6px rgba(15, 34, 54, 0.35));
+    }
+
+    .tile-lock.is-orthographic {
+      object-fit: cover;
+      opacity: 0.88;
+      filter: drop-shadow(0 5px 5px rgba(15, 34, 54, 0.24));
     }
 
     .board-object {
@@ -1234,7 +1255,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.8</div>
+    <div class="version-line">version 0.0.9</div>
   </main>
 
   <script>
@@ -1474,6 +1495,10 @@
       return window.matchMedia("(orientation: portrait) and (max-width: 480px)").matches;
     }
 
+    function isOrthographicBoard() {
+      return isPortraitPhoneViewport();
+    }
+
     function isMobileOrderDrawer() {
       return window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches;
     }
@@ -1501,6 +1526,34 @@
 
     function zoomSize(value) {
       return Math.round(value * boardZoom);
+    }
+
+    function getBoardMetrics() {
+      if (isOrthographicBoard()) {
+        const cellSize = zoomSize(28);
+
+        return {
+          mode: "orthographic",
+          tileW: cellSize,
+          tileH: cellSize,
+          halfTileW: cellSize / 2,
+          halfTileH: cellSize / 2,
+          tileCenterX: cellSize / 2,
+          tileCenterY: cellSize / 2,
+          itemFootY: Math.round(cellSize * 0.72)
+        };
+      }
+
+      return {
+        mode: "isometric",
+        tileW: zoomSize(tileW),
+        tileH: zoomSize(tileImgH),
+        halfTileW: zoomSize(halfTileW),
+        halfTileH: zoomSize(halfTileH),
+        tileCenterX: zoomSize(tileCenterX),
+        tileCenterY: zoomSize(tileCenterY),
+        itemFootY: zoomSize(itemFootY)
+      };
     }
 
     function getZoomStep() {
@@ -1675,12 +1728,19 @@
 
     function getBoardScreenPosition(x, y, originX, originY) {
       const display = getBoardDisplayPosition(x, y);
-      const renderHalfTileW = zoomSize(halfTileW);
-      const renderHalfTileH = zoomSize(halfTileH);
+      const metrics = getBoardMetrics();
+
+      if (metrics.mode === "orthographic") {
+        return {
+          x: snapBoardPixel(display.x * metrics.tileW + originX),
+          y: snapBoardPixel(display.y * metrics.tileH + originY),
+          z: display.y * getBoardDisplaySize().cols + display.x
+        };
+      }
 
       return {
-        x: snapBoardPixel((display.x - display.y) * renderHalfTileW + originX),
-        y: snapBoardPixel((display.x + display.y) * renderHalfTileH + originY),
+        x: snapBoardPixel((display.x - display.y) * metrics.halfTileW + originX),
+        y: snapBoardPixel((display.x + display.y) * metrics.halfTileH + originY),
         z: display.x + display.y
       };
     }
@@ -2384,10 +2444,11 @@
 
     function getBoardAnchor(object) {
       const screen = getBoardScreenPosition(object.x, object.y, lastOriginX, lastOriginY);
+      const metrics = getBoardMetrics();
 
       return {
-        x: screen.x + zoomSize(tileCenterX),
-        y: screen.y + zoomSize(itemFootY)
+        x: screen.x + metrics.tileCenterX,
+        y: screen.y + metrics.itemFootY
       };
     }
 
@@ -2663,10 +2724,11 @@
       }
 
       const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
+      const metrics = getBoardMetrics();
       const popup = document.createElement("div");
       const remaining = object.readyAt - Date.now();
-      const overlayX = screen.x + zoomSize(tileCenterX) + panX;
-      const overlayY = screen.y + zoomSize(itemFootY) + panY;
+      const overlayX = screen.x + metrics.tileCenterX + panX;
+      const overlayY = screen.y + metrics.itemFootY + panY;
 
       popup.className = "cooldown-popup";
       popup.style.left = `${overlayX}px`;
@@ -2685,7 +2747,8 @@
     function findNearestTile(clientX, clientY) {
       let nearest = null;
       let nearestDistance = Infinity;
-      const maxDistance = zoomSize(tileW) * 0.72;
+      const metrics = getBoardMetrics();
+      const maxDistance = Math.max(metrics.tileW, metrics.tileH) * 0.72;
       const viewportRect = viewport.getBoundingClientRect();
 
       tilePlacementPoints.forEach((tile) => {
@@ -2861,6 +2924,7 @@
     }
 
     function renderSpawnedObjects(originX, originY) {
+      const metrics = getBoardMetrics();
       spawnedObjects.forEach((object) => {
         const screen = getBoardScreenPosition(object.x, object.y, originX, originY);
         const wrapper = document.createElement("div");
@@ -2876,8 +2940,8 @@
           "is-sleeping",
           characterConfig && object.file === characterConfig.sleepFile && !isSleepingCharacterReady(object)
         );
-        wrapper.style.left = `${screen.x + zoomSize(tileCenterX)}px`;
-        wrapper.style.top = `${screen.y + zoomSize(itemFootY)}px`;
+        wrapper.style.left = `${screen.x + metrics.tileCenterX}px`;
+        wrapper.style.top = `${screen.y + metrics.itemFootY}px`;
         wrapper.style.zIndex = `${screen.z + 100}`;
         wrapper.style.setProperty("--item-scale", getItemVisualScale(object.file) * boardZoom);
 
@@ -2948,20 +3012,16 @@
       const viewportW = viewport.clientWidth;
       const viewportH = viewport.clientHeight;
       const displaySize = getBoardDisplaySize();
-      const renderTileW = zoomSize(tileW);
-      const renderTileImgH = zoomSize(tileImgH);
-      const renderHalfTileW = zoomSize(halfTileW);
-      const renderHalfTileH = zoomSize(halfTileH);
-      const renderTileCenterX = zoomSize(tileCenterX);
-      const renderTileCenterY = zoomSize(tileCenterY);
-      const minX = (0 - (displaySize.rows - 1)) * renderHalfTileW;
-      const maxX = ((displaySize.cols - 1) - 0) * renderHalfTileW;
+      const metrics = getBoardMetrics();
+      const isOrthographic = metrics.mode === "orthographic";
+      const minX = isOrthographic ? 0 : (0 - (displaySize.rows - 1)) * metrics.halfTileW;
+      const maxX = isOrthographic ? (displaySize.cols - 1) * metrics.tileW : ((displaySize.cols - 1) - 0) * metrics.halfTileW;
       const minY = 0;
-      const maxY = ((displaySize.cols - 1) + (displaySize.rows - 1)) * renderHalfTileH;
+      const maxY = isOrthographic ? (displaySize.rows - 1) * metrics.tileH : ((displaySize.cols - 1) + (displaySize.rows - 1)) * metrics.halfTileH;
       const visualMinX = minX;
-      const visualMaxX = maxX + renderTileW;
+      const visualMaxX = maxX + metrics.tileW;
       const visualMinY = minY;
-      const visualMaxY = maxY + renderTileImgH;
+      const visualMaxY = maxY + metrics.tileH;
       const originX = Math.round(viewportW / 2 - (visualMinX + visualMaxX) / 2);
       const originY = Math.round(viewportH / 2 - (visualMinY + visualMaxY) / 2);
       lastOriginX = originX;
@@ -2974,21 +3034,26 @@
           if (!isBoardTile(x, y)) continue;
 
           const screen = getBoardScreenPosition(x, y, originX, originY);
-          const placementX = screen.x + renderTileCenterX;
-          const placementY = screen.y + renderTileCenterY;
+          const placementX = screen.x + metrics.tileCenterX;
+          const placementY = screen.y + metrics.tileCenterY;
           const tile = document.createElement("div");
           const isUnlocked = isBoardTileUnlocked(x, y);
 
           tile.className = "tile";
+          tile.classList.toggle("is-orthographic", isOrthographic);
           tile.dataset.x = `${x}`;
           tile.dataset.y = `${y}`;
           tile.dataset.tile = (x + y) % 2 === 0 ? "black" : "white";
-          tile.style.setProperty(
-            "--cube-image",
-            `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
-          );
-          tile.style.width = `${renderTileW}px`;
-          tile.style.height = `${renderTileImgH}px`;
+          if (isOrthographic) {
+            tile.style.setProperty("--tile-color", tile.dataset.tile === "black" ? "#5b6579" : "#9aa6b8");
+          } else {
+            tile.style.setProperty(
+              "--cube-image",
+              `url("Asset/${tile.dataset.tile === "black" ? "Black_Tile" : "White_Tile"}.png")`
+            );
+          }
+          tile.style.width = `${metrics.tileW}px`;
+          tile.style.height = `${metrics.tileH}px`;
           tile.style.left = `${screen.x}px`;
           tile.style.top = `${screen.y}px`;
           tile.style.zIndex = `${screen.z}`;
@@ -3007,10 +3072,11 @@
           if (!isUnlocked) {
             const lock = document.createElement("img");
             lock.className = "tile-lock";
+            lock.classList.toggle("is-orthographic", isOrthographic);
             lock.src = "Asset/Cloud_Lock.png";
             lock.alt = "";
-            lock.style.width = `${renderTileW}px`;
-            lock.style.height = `${renderTileImgH}px`;
+            lock.style.width = `${metrics.tileW}px`;
+            lock.style.height = `${metrics.tileH}px`;
             lock.style.left = `${screen.x}px`;
             lock.style.top = `${screen.y}px`;
             lock.style.zIndex = `${screen.z + 60}`;
