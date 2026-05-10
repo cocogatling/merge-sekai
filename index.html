@@ -1317,6 +1317,26 @@
         height: 24px;
       }
 
+      .discord-activity .xp-counter {
+        top: calc(max(14px, env(safe-area-inset-top)) + 42px);
+      }
+
+      .discord-activity .zoom-controls {
+        top: calc(max(14px, env(safe-area-inset-top)) + 134px);
+      }
+
+      .discord-activity .flip-button {
+        top: calc(max(14px, env(safe-area-inset-top)) + 180px);
+      }
+
+      .discord-activity .auth-button {
+        top: calc(max(14px, env(safe-area-inset-top)) + 226px);
+      }
+
+      .discord-activity .reward-inventory-counter {
+        top: calc(max(14px, env(safe-area-inset-top)) + 42px);
+      }
+
       .order-panel {
         left: max(12px, env(safe-area-inset-left));
         bottom: calc(max(16px, env(safe-area-inset-bottom)) + 128px);
@@ -1438,8 +1458,13 @@
     const discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
 
     async function setupDiscordActivity() {
-      await discordSdk.ready();
-      console.log("Discord Activity SDK is ready!");
+      try {
+        await discordSdk.ready();
+        document.documentElement.classList.add("discord-activity");
+        console.log("Discord Activity SDK is ready!");
+      } catch (error) {
+        console.warn("Discord Activity SDK is unavailable:", error);
+      }
 
       // Later: Discord auth, user ID, cloud save, multiplayer, etc.
     }
@@ -1522,7 +1547,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.23</div>
+    <div class="version-line">version 0.0.24</div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -2741,6 +2766,10 @@
       return changed;
     }
 
+    function getAvailableRewardTiles(origin, count) {
+      return getNearestEmptyTiles(origin, count);
+    }
+
     function getRandomSpawnItem() {
       const unlockedSpawnTable = spawnTable.filter((item) => item.unlockLevel <= playerLevel);
       const totalChance = unlockedSpawnTable.reduce((sum, item) => sum + item.chance, 0);
@@ -3298,13 +3327,23 @@
 
       if (current.finalRewardReady) {
         const origin = { x: current.x, y: current.y };
-        spawnedObjects.splice(index, 1);
-        const rewardTiles = getNearestEmptyTiles(origin, 2);
+        const pendingRewardCount = current.pendingFinalRewardCount || 2;
+        const rewardTiles = getAvailableRewardTiles(origin, pendingRewardCount);
+
+        if (rewardTiles.length === 0) {
+          showSpaceWarning();
+          return false;
+        }
 
         rewardTiles.forEach((tile) => {
           const resultObject = addBoardObject(config.finalRewardFile, config.finalRewardName, tile.x, tile.y);
           resultObject.justMerged = true;
         });
+
+        current.pendingFinalRewardCount = pendingRewardCount - rewardTiles.length;
+        if (current.pendingFinalRewardCount <= 0) {
+          spawnedObjects.splice(index, 1);
+        }
 
         saveGame();
         buildGrid();
@@ -3315,13 +3354,28 @@
         return false;
       }
 
-      const rewardCount = Math.floor(Math.random() * 5) + 1;
-      const rewardTiles = getNearestEmptyTiles(current, rewardCount);
+      const pendingRewardCount = current.pendingHarvestRewardCount || Math.floor(Math.random() * 5) + 1;
+      const rewardTiles = getAvailableRewardTiles(current, pendingRewardCount);
+
+      if (rewardTiles.length === 0) {
+        current.pendingHarvestRewardCount = pendingRewardCount;
+        showSpaceWarning();
+        saveGame();
+        return false;
+      }
 
       rewardTiles.forEach((tile) => {
         addBoardObject(config.rewardFile, config.harvestRewardName, tile.x, tile.y);
       });
 
+      current.pendingHarvestRewardCount = pendingRewardCount - rewardTiles.length;
+      if (current.pendingHarvestRewardCount > 0) {
+        saveGame();
+        buildGrid();
+        return true;
+      }
+
+      delete current.pendingHarvestRewardCount;
       current.harvests = (current.harvests || 0) + 1;
       current.file = config.sleepFile;
       current.name = `${config.finalName} Sleep`;
