@@ -1132,7 +1132,36 @@
     @media (max-width: 1600px) {
       .viewport {
         width: min(1536px, 96vw);
-        height: min(738px, 54vw);
+        height: min(738px, 54vw, calc(100dvh - 36px));
+      }
+    }
+
+    @media (orientation: landscape) and (max-height: 760px) {
+      body {
+        min-height: 100dvh;
+        overflow: hidden;
+      }
+
+      .game-shell {
+        gap: 4px;
+      }
+
+      .viewport {
+        width: min(1536px, 98vw);
+        height: calc(100dvh - 28px);
+        border-radius: 16px;
+      }
+
+      .spawner {
+        bottom: 38px;
+      }
+
+      .spawner-timer {
+        bottom: -26px;
+      }
+
+      .order-panel {
+        bottom: 12px;
       }
     }
 
