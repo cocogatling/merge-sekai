@@ -515,23 +515,28 @@
       pointer-events: none;
     }
 
-    .reset-button {
-      position: absolute;
-      left: 22px;
-      top: 72px;
-      z-index: 20;
-      min-height: 34px;
-      padding: 0 14px;
-      border: 2px solid rgba(255, 255, 255, 0.78);
-      border-radius: 7px;
-      background: rgba(36, 36, 58, 0.78);
-      color: #ff6096;
-      font: inherit;
-      font-size: 14px;
-      font-weight: 900;
-      cursor: pointer;
-      box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
-    }
+  .reset-button {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 20;
+
+    min-height: 34px;
+    padding: 0 14px;
+    border: 2px solid rgba(255, 255, 255, 0.78);
+    border-radius: 7px;
+
+    background: rgba(36, 36, 58, 0.78);
+    color: #ff6096;
+
+    font: inherit;
+    font-size: 14px;
+    font-weight: 900;
+
+    cursor: pointer;
+
+    box-shadow: 0 6px 14px rgba(15, 34, 54, 0.24);
+  }
 
     .reset-button:hover {
       background: rgba(54, 54, 86, 0.9);
@@ -540,7 +545,7 @@
     .zoom-controls {
       position: absolute;
       left: 22px;
-      top: 118px;
+      top: 72px;
       z-index: 20;
       display: flex;
       gap: 6px;
@@ -566,15 +571,15 @@
     }
 
     .flip-button {
-      top: 164px;
+      top: 118px;
     }
 
     .projection-button {
-      top: 210px;
+      top: 164px;
     }
 
     .auth-button {
-      top: 256px;
+      top: 210px;
     }
 
     .flip-button:hover,
@@ -1363,6 +1368,23 @@
     }
 
   </style>
+
+  <script type="module">
+    import { DiscordSDK } from "https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk/+esm";
+
+    const DISCORD_CLIENT_ID = "1502880926538006609";
+    const discordSdk = new DiscordSDK(DISCORD_CLIENT_ID);
+
+    async function setupDiscordActivity() {
+      await discordSdk.ready();
+      console.log("Discord Activity SDK is ready!");
+
+      // Later: Discord auth, user ID, cloud save, multiplayer, etc.
+    }
+
+    setupDiscordActivity();
+  </script>
+
 </head>
 <body>
   <main class="game-shell">
@@ -1425,7 +1447,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.21</div>
+    <div class="version-line">version 0.0.22</div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -1674,6 +1696,34 @@
     let cooldownPopupTimeout = null;
     let lastOriginX = 0;
     let lastOriginY = 0;
+
+    async function loginWithDiscordCode(code) {
+	try {
+		const response = await fetch(
+			"https://hrxkflnvevjhzqiukamp.functions.supabase.co/discord-token",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					code,
+				}),
+			}
+		);
+
+		const user = await response.json();
+
+		console.log("Discord User:", user);
+
+		return user;
+	} catch (err) {
+		console.error(
+			"Discord login failed:",
+			err
+		);
+	}
+}
 
     function clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
@@ -3720,6 +3770,12 @@
     });
 
     resetButton.addEventListener("click", () => {
+      const confirmed = confirm(
+        "Are you sure you want to reset your save?\n\nThis cannot be undone."
+      );
+
+      if (!confirmed) return;
+
       resetGame();
     });
 
