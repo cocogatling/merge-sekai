@@ -150,6 +150,8 @@
       transform: translate(-50%, -100%);
       transform-origin: bottom center;
       filter: drop-shadow(0 6px 5px rgba(15, 34, 54, 0.35));
+      color: transparent;
+      font-size: 0;
     }
 
     .board-object.is-dragging {
@@ -187,6 +189,7 @@
       outline: none;
       -webkit-tap-highlight-color: transparent;
       -webkit-touch-callout: none;
+      touch-action: none;
     }
 
     .board-item .board-object {
@@ -350,6 +353,8 @@
       transform: translate(-50%, -50%) scale(var(--ghost-scale, 1));
       transform-origin: center;
       filter: drop-shadow(0 12px 10px rgba(15, 34, 54, 0.42));
+      color: transparent;
+      font-size: 0;
     }
 
     .drag-ghost.is-orthographic {
@@ -1281,12 +1286,12 @@
 
       .zoom-controls {
         left: max(12px, env(safe-area-inset-left));
-        top: calc(max(14px, env(safe-area-inset-top)) + 92px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 50px);
       }
 
       .flip-button {
         left: max(12px, env(safe-area-inset-left));
-        top: calc(max(14px, env(safe-area-inset-top)) + 138px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 94px);
       }
 
       .projection-button {
@@ -1295,7 +1300,7 @@
 
       .auth-button {
         left: max(12px, env(safe-area-inset-left));
-        top: calc(max(14px, env(safe-area-inset-top)) + 184px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 138px);
       }
 
       .reward-inventory-counter {
@@ -1322,15 +1327,15 @@
       }
 
       .discord-activity .zoom-controls {
-        top: calc(max(14px, env(safe-area-inset-top)) + 134px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 80px);
       }
 
       .discord-activity .flip-button {
-        top: calc(max(14px, env(safe-area-inset-top)) + 180px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 124px);
       }
 
       .discord-activity .auth-button {
-        top: calc(max(14px, env(safe-area-inset-top)) + 226px);
+        top: calc(max(14px, env(safe-area-inset-top)) + 168px);
       }
 
       .discord-activity .reward-inventory-counter {
@@ -1391,15 +1396,15 @@
       }
 
       .zoom-controls {
-        top: calc(max(12px, env(safe-area-inset-top)) + 82px);
+        top: calc(max(12px, env(safe-area-inset-top)) + 46px);
       }
 
       .flip-button {
-        top: calc(max(12px, env(safe-area-inset-top)) + 122px);
+        top: calc(max(12px, env(safe-area-inset-top)) + 86px);
       }
 
       .auth-button {
-        top: calc(max(12px, env(safe-area-inset-top)) + 162px);
+        top: calc(max(12px, env(safe-area-inset-top)) + 126px);
       }
 
       .reward-inventory-counter {
@@ -1547,7 +1552,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.24</div>
+    <div class="version-line">version 0.0.25</div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
@@ -1783,10 +1788,13 @@
       "Coin_4.png": { file: "Coin_5.png", name: "Coin 81" },
       "Coin_5.png": { file: "Coin_6.png", name: "Coin 243" }
     };
+    const preloadedAssetUrls = new Set();
     const spawnedObjects = [];
     let nextObjectId = 1;
     let draggedObject = null;
     let dragGhost = null;
+    let activeDragPointerId = null;
+    let activeDragHitbox = null;
     let dragStartClientX = 0;
     let dragStartClientY = 0;
     let didDragMove = false;
@@ -2088,6 +2096,46 @@
       return isBoardFlipped
         ? { x: y, y: x }
         : { x, y };
+    }
+
+    function getAssetUrl(file) {
+      return `Asset/${file}`;
+    }
+
+    function preloadAsset(file) {
+      if (!file) return;
+
+      const url = getAssetUrl(file);
+      if (preloadedAssetUrls.has(url)) return;
+      preloadedAssetUrls.add(url);
+
+      const img = new Image();
+      img.decoding = "sync";
+      img.src = url;
+    }
+
+    function preloadGameAssets() {
+      [
+        "box.png",
+        "EXP_Note.png",
+        "timer.png",
+        "Sparkle.gif",
+        "Black_Tile.png",
+        "White_Tile.png",
+        "Black_Tile_Ortho.png",
+        "White_Tile_Ortho.png",
+        "Cloud_Lock.png",
+        "Cloud_Lock_Ortho.png",
+        ...spawnTable.map((entry) => entry.file),
+        ...Object.keys(mergeChain),
+        ...Object.values(mergeChain).map((entry) => entry.file),
+        ...characterConfigs.flatMap((config) => [
+          config.rewardFile,
+          config.finalRewardFile,
+          config.finalFile,
+          config.sleepFile
+        ])
+      ].forEach(preloadAsset);
     }
 
     function getBoardScreenPosition(x, y, originX, originY) {
@@ -2402,10 +2450,7 @@
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
 
-      if (dragGhost) {
-        dragGhost.remove();
-        dragGhost = null;
-      }
+      removeDragGhosts();
 
       updateTransform();
       updateZoomControls();
@@ -3525,6 +3570,41 @@
       dragGhost.style.top = `${clientY}px`;
     }
 
+    function removeDragGhosts() {
+      document.querySelectorAll(".drag-ghost").forEach((ghost) => ghost.remove());
+      dragGhost = null;
+    }
+
+    function cleanupObjectDragListeners() {
+      window.removeEventListener("pointermove", handleObjectDragMove);
+      window.removeEventListener("pointerup", handleObjectDragEnd);
+      window.removeEventListener("pointercancel", handleObjectDragCancel);
+      window.removeEventListener("blur", cancelObjectDrag);
+      document.removeEventListener("visibilitychange", handleDragVisibilityChange);
+      if (activeDragHitbox) {
+        activeDragHitbox.removeEventListener("lostpointercapture", handleObjectDragCancel);
+      }
+      if (activeDragHitbox && activeDragPointerId !== null && activeDragHitbox.hasPointerCapture?.(activeDragPointerId)) {
+        activeDragHitbox.releasePointerCapture(activeDragPointerId);
+      }
+      activeDragHitbox = null;
+      activeDragPointerId = null;
+    }
+
+    function cancelObjectDrag() {
+      if (!draggedObject && !dragGhost) return;
+      cleanupObjectDragListeners();
+      clearMergeHoverPreview();
+      removeDragGhosts();
+      draggedObject = null;
+      didDragMove = false;
+      buildGrid();
+    }
+
+    function handleDragVisibilityChange() {
+      if (document.hidden) cancelObjectDrag();
+    }
+
     function endObjectDrag(event) {
       if (!draggedObject) return;
 
@@ -3549,10 +3629,7 @@
         }
       }
 
-      if (dragGhost) {
-        dragGhost.remove();
-        dragGhost = null;
-      }
+      removeDragGhosts();
 
       draggedObject = null;
       if (merged) {
@@ -3574,29 +3651,40 @@
     function startObjectDrag(event, object) {
       event.preventDefault();
       event.stopPropagation();
+      cancelObjectDrag();
 
       draggedObject = object;
+      activeDragPointerId = event.pointerId;
+      activeDragHitbox = event.currentTarget;
       dragStartClientX = event.clientX;
       dragStartClientY = event.clientY;
       didDragMove = false;
       event.currentTarget.closest(".board-item")?.classList.add("is-dragging");
+      if (event.pointerId !== undefined) {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }
+      event.currentTarget.addEventListener("lostpointercapture", handleObjectDragCancel);
 
       dragGhost = document.createElement("img");
       dragGhost.className = "drag-ghost";
       dragGhost.classList.toggle("is-orthographic", isOrthographicBoard());
-      dragGhost.src = `Asset/${object.file}`;
+      preloadAsset(object.file);
+      dragGhost.src = getAssetUrl(object.file);
       dragGhost.alt = "";
+      dragGhost.draggable = false;
       dragGhost.style.setProperty("--ghost-scale", getRenderedItemScale(object.file));
       document.body.appendChild(dragGhost);
       moveDragGhost(event.clientX, event.clientY);
 
       window.addEventListener("pointermove", handleObjectDragMove);
-      window.addEventListener("pointerup", handleObjectDragEnd, { once: true });
-      window.addEventListener("pointercancel", handleObjectDragEnd, { once: true });
+      window.addEventListener("pointerup", handleObjectDragEnd);
+      window.addEventListener("pointercancel", handleObjectDragCancel);
+      window.addEventListener("blur", cancelObjectDrag);
+      document.addEventListener("visibilitychange", handleDragVisibilityChange);
     }
 
     function handleObjectDragMove(event) {
-      if (!draggedObject) return;
+      if (!draggedObject || event.pointerId !== activeDragPointerId) return;
       if (Math.hypot(event.clientX - dragStartClientX, event.clientY - dragStartClientY) > 4) {
         didDragMove = true;
       }
@@ -3605,11 +3693,15 @@
     }
 
     function handleObjectDragEnd(event) {
-      window.removeEventListener("pointermove", handleObjectDragMove);
-      window.removeEventListener("pointerup", handleObjectDragEnd);
-      window.removeEventListener("pointercancel", handleObjectDragEnd);
+      if (event.pointerId !== activeDragPointerId) return;
+      cleanupObjectDragListeners();
       clearMergeHoverPreview();
       endObjectDrag(event);
+    }
+
+    function handleObjectDragCancel(event) {
+      if (event.pointerId !== undefined && event.pointerId !== activeDragPointerId) return;
+      cancelObjectDrag();
     }
 
     function isSleepingCharacterReady(object) {
@@ -3648,8 +3740,10 @@
         hitbox.className = "board-item-hitbox";
 
         img.className = "board-object";
-        img.src = `Asset/${object.file}`;
-        img.alt = object.name;
+        preloadAsset(object.file);
+        img.src = getAssetUrl(object.file);
+        img.alt = "";
+        img.draggable = false;
         img.dataset.id = `${object.id}`;
         img.dataset.x = `${object.x}`;
         img.dataset.y = `${object.y}`;
@@ -4030,6 +4124,8 @@
     });
 
     async function startGame() {
+      preloadGameAssets();
+
       if (supabaseClient) {
         supabaseClient.auth.onAuthStateChange(() => {
           syncAfterAuthChange();

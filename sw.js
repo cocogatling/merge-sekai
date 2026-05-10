@@ -1,4 +1,4 @@
-const CACHE_NAME = "merge-sekai-v1";
+const CACHE_NAME = "merge-sekai-v2";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -13,7 +13,37 @@ const CORE_ASSETS = [
   "./Asset/box.png",
   "./Asset/EXP_Note.png",
   "./Asset/timer.png",
-  "./Asset/Sparkle.gif"
+  "./Asset/Sparkle.gif",
+  "./Asset/Kanade_1.png",
+  "./Asset/Kanade_2.png",
+  "./Asset/Kanade_3.png",
+  "./Asset/Kanade_4.png",
+  "./Asset/Kanade_4_Sleep.png",
+  "./Asset/Mafuyu_1.png",
+  "./Asset/Mafuyu_2.png",
+  "./Asset/Mafuyu_3.png",
+  "./Asset/Mafuyu_4.png",
+  "./Asset/Mafuyu_4_Sleep.png",
+  "./Asset/Ena_1.png",
+  "./Asset/Ena_2.png",
+  "./Asset/Ena_3.png",
+  "./Asset/Ena_4.png",
+  "./Asset/Ena_4_Sleep.png",
+  "./Asset/Mizuki_1.png",
+  "./Asset/Mizuki_2.png",
+  "./Asset/Mizuki_3.png",
+  "./Asset/Mizuki_4.png",
+  "./Asset/Mizuki_4_Sleep.png",
+  "./Asset/Coin_1.png",
+  "./Asset/Coin_2.png",
+  "./Asset/Coin_3.png",
+  "./Asset/Coin_4.png",
+  "./Asset/Coin_5.png",
+  "./Asset/Coin_6.png",
+  "./Asset/chr_il/chr_il_17.png",
+  "./Asset/chr_il/chr_il_18.png",
+  "./Asset/chr_il/chr_il_19.png",
+  "./Asset/chr_il/chr_il_20.png"
 ];
 
 self.addEventListener("install", (event) => {
