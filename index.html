@@ -244,13 +244,15 @@
     }
 
     .board-item.is-centered .timer-overlay {
-      top: 68%;
-      width: 18px;
-      height: 18px;
+      top: 155%;
+      width: 12px;
+      height: 12px;
       padding: 2px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.92);
       box-shadow: 0 3px 7px rgba(15, 34, 54, 0.28);
+      transform: translate(-50%, -50%) scale(calc(var(--item-scale, 1) * 0.48));
+      transform-origin: center;
     }
 
     .character-reward-popup {
@@ -414,6 +416,27 @@
       box-shadow: 0 5px 8px rgba(15, 34, 54, 0.3);
     }
 
+    .lucky-merge-popup {
+      position: fixed;
+      z-index: 1110;
+      color: #27e234;
+      font-size: 34px;
+      font-weight: 900;
+      line-height: 0.88;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(0.72);
+      text-shadow:
+        0 3px 0 #128d1c,
+        0 -2px 0 #a8ff75,
+        3px 0 0 #128d1c,
+        -3px 0 0 #128d1c,
+        0 8px 10px rgba(15, 34, 54, 0.42);
+      animation: lucky-merge-pop 1250ms ease-out forwards;
+    }
+
     @keyframes merge-fly {
       0% {
         transform: translate(-50%, -100%) scale(var(--merge-scale, 1));
@@ -462,6 +485,25 @@
       }
       50% {
         transform: translate(-50%, -104%) scale(1.08);
+      }
+    }
+
+    @keyframes lucky-merge-pop {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -40%) scale(0.56);
+      }
+      18% {
+        opacity: 1;
+        transform: translate(-50%, -70%) scale(1.08);
+      }
+      72% {
+        opacity: 1;
+        transform: translate(-50%, -82%) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -112%) scale(0.92);
       }
     }
 
@@ -1336,7 +1378,7 @@
         <button id="orderComplete" class="order-complete" type="button">Complete</button>
       </div>
     </div>
-    <div class="version-line">version 0.0.11</div>
+    <div class="version-line">version 0.0.12</div>
   </main>
 
   <script>
@@ -1414,7 +1456,7 @@
     const touchPanDeadzone = 10;
     let boardZoom = getDefaultZoom();
     let isBoardFlipped = false;
-    let boardProjection = "isometric";
+    let boardProjection = "orthographic";
     let panX = 0;
     let panY = 0;
     let isPanning = false;
@@ -1437,6 +1479,7 @@
     const restoreAmount = 5;
     const restoreDelayMs = 5 * 60 * 1000;
     const characterSleepDelayMs = 60 * 60 * 1000;
+    const luckyMergeChance = 0.05;
     const mergeXpTable = {
       3: {
         1: 3,
@@ -1807,6 +1850,13 @@
     }
 
     function getBoardDisplaySize() {
+      if (isOrthographicBoard() && isPortraitPhoneViewport()) {
+        return {
+          rows,
+          cols
+        };
+      }
+
       return {
         rows: isBoardFlipped ? cols : rows,
         cols: isBoardFlipped ? rows : cols
@@ -1814,6 +1864,17 @@
     }
 
     function getBoardDisplayPosition(x, y) {
+      if (isOrthographicBoard() && isPortraitPhoneViewport()) {
+        return { x, y };
+      }
+
+      if (isOrthographicBoard() && isBoardFlipped) {
+        return {
+          x: rows - 1 - y,
+          y: x
+        };
+      }
+
       return isBoardFlipped
         ? { x: y, y: x }
         : { x, y };
@@ -1961,7 +2022,7 @@
       panY = 0;
       boardZoom = normalizeBoardZoom(getDefaultZoom());
       isBoardFlipped = false;
-      boardProjection = "isometric";
+      boardProjection = "orthographic";
       draggedObject = null;
       spawnedObjects.splice(0, spawnedObjects.length);
 
@@ -2606,6 +2667,54 @@
       }, 440);
     }
 
+    function getMergeRecipe(totalMergeCount) {
+      const mergeRecipes = {
+        3: { groups: [3], currentResults: 0 },
+        4: { groups: [4], currentResults: 1 },
+        5: { groups: [5], currentResults: 0 },
+        6: { groups: [3, 3], currentResults: 0 },
+        7: { groups: [3, 4], currentResults: 1 },
+        8: { groups: [5, 3], currentResults: 0 },
+        9: { groups: [3, 3, 3], currentResults: 0 },
+        10: { groups: [5, 5], currentResults: 0 }
+      };
+
+      if (mergeRecipes[totalMergeCount]) return mergeRecipes[totalMergeCount];
+      if (totalMergeCount < 3) return null;
+
+      const bestRecipes = Array(totalMergeCount + 1).fill(null);
+      bestRecipes[0] = { groups: [], currentResults: 0, nextResults: 0 };
+
+      for (let count = 1; count <= totalMergeCount; count += 1) {
+        [3, 5].forEach((group) => {
+          const previous = bestRecipes[count - group];
+          if (!previous) return;
+
+          const candidate = {
+            groups: [...previous.groups, group],
+            currentResults: 0,
+            nextResults: previous.nextResults + (group === 5 ? 2 : 1)
+          };
+          const current = bestRecipes[count];
+          if (
+            !current ||
+            candidate.nextResults > current.nextResults ||
+            (
+              candidate.nextResults === current.nextResults &&
+              candidate.groups.length < current.groups.length
+            )
+          ) {
+            bestRecipes[count] = candidate;
+          }
+        });
+      }
+
+      const recipe = bestRecipes[totalMergeCount];
+      return recipe
+        ? { groups: recipe.groups, currentResults: 0 }
+        : null;
+    }
+
     function getDropMergePlan(dragged, target) {
       if (!target || dragged.file !== target.file) return null;
       const result = mergeChain[dragged.file];
@@ -2614,23 +2723,26 @@
       const ignoredIds = new Set([dragged.id]);
       const cluster = getOrthogonalCluster(target, dragged.file, ignoredIds);
       const totalMergeCount = cluster.length + 1;
-      const isSixMerge = totalMergeCount >= 6;
-      const isFourMerge = totalMergeCount === 4;
-      const isBonusMerge = !isSixMerge && totalMergeCount >= 5;
-      const mergeCount = isSixMerge ? 6 : isBonusMerge ? 5 : isFourMerge ? 4 : 3;
-      const consumedChain = cluster.slice(0, mergeCount - 1);
-      const results = isFourMerge
-        ? [result, { file: dragged.file, name: dragged.name }]
-        : Array.from({ length: mergeCount >= 5 ? 2 : 1 }, () => result);
+      const recipe = getMergeRecipe(totalMergeCount);
+      if (!recipe) return null;
+
+      const consumedChain = cluster.slice(0, totalMergeCount - 1);
+      const nextResultCount = recipe.groups.reduce((sum, group) => sum + (group === 5 ? 2 : 1), 0);
+      const results = [
+        ...Array.from({ length: nextResultCount }, () => result),
+        ...Array.from({ length: recipe.currentResults }, () => ({ file: dragged.file, name: dragged.name }))
+      ];
 
       if (consumedChain.length < 2) return null;
 
       return {
         result,
         results,
-        isBonusMerge,
+        mergeGroups: recipe.groups,
+        nextResultCount,
+        isBonusMerge: totalMergeCount === 5,
         resultCount: results.length,
-        mergeCount,
+        mergeCount: totalMergeCount,
         consumedChain
       };
     }
@@ -2704,6 +2816,35 @@
       return mergeXpTable[mergeCount]?.[level] || 0;
     }
 
+    function getMergePlanXp(file, plan) {
+      return plan.mergeGroups.reduce((sum, mergeCount) => sum + getMergeXp(file, mergeCount), 0);
+    }
+
+    function rollLuckyMergeResults(plan) {
+      const luckyResults = [];
+
+      for (let index = 0; index < plan.nextResultCount; index += 1) {
+        if (Math.random() < luckyMergeChance) {
+          luckyResults.push(plan.result);
+        }
+      }
+
+      return luckyResults;
+    }
+
+    function showLuckyMergePopup(originTile) {
+      if (!originTile) return;
+
+      const point = getViewportPointFromBoardAnchor(getBoardAnchor(originTile));
+      const popup = document.createElement("div");
+      popup.className = "lucky-merge-popup";
+      popup.innerHTML = "Lucky<br>Merge!";
+      popup.style.left = `${point.x}px`;
+      popup.style.top = `${point.y}px`;
+      document.body.appendChild(popup);
+      setTimeout(() => popup.remove(), 1350);
+    }
+
     function getViewportPointFromBoardAnchor(anchor) {
       const viewportRect = viewport.getBoundingClientRect();
 
@@ -2754,7 +2895,10 @@
       const plan = getDropMergePlan(dragged, target);
       if (!plan) return false;
 
-      const { results, resultCount, mergeCount, consumedChain } = plan;
+      const luckyResults = rollLuckyMergeResults(plan);
+      const results = [...plan.results, ...luckyResults];
+      const resultCount = results.length;
+      const { consumedChain } = plan;
       const merging = [dragged, ...consumedChain];
       const mergingIds = new Set(merging.map((item) => item.id));
       const resultTiles = consumedChain.slice(0, resultCount);
@@ -2778,7 +2922,10 @@
         const resultObject = addBoardObject(output.file, output.name, tile.x, tile.y);
         resultObject.justMerged = true;
       });
-      addXp(getMergeXp(dragged.file, mergeCount), resultTiles[0], getMergeItemLevel(dragged.file) || 1);
+      if (luckyResults.length > 0) {
+        showLuckyMergePopup(resultTiles[0]);
+      }
+      addXp(getMergePlanXp(dragged.file, plan), resultTiles[0], getMergeItemLevel(dragged.file) || 1);
       saveGame();
       return true;
     }
