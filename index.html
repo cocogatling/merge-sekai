@@ -1985,6 +1985,7 @@
     let enaRewardInventory = 0;
     let mizukiRewardInventory = 0;
     let activeOrder = null;
+    let completedOrderCount = 0;
     let isOrderPanelOpen = false;
     let wasOrderCompletable = false;
     const characterConfigs = [
@@ -2187,13 +2188,17 @@
       return Math.round(value);
     }
 
-    function zoomSize(value) {
-      return Math.round(value * boardZoom);
+    function zoomSizeFor(value, zoom = boardZoom) {
+      return Math.round(value * zoom);
     }
 
-    function getBoardMetrics() {
+    function zoomSize(value) {
+      return zoomSizeFor(value);
+    }
+
+    function getBoardMetrics(zoom = boardZoom) {
       if (isOrthographicBoard()) {
-        const cellSize = zoomSize(32);
+        const cellSize = zoomSizeFor(32, zoom);
 
         return {
           mode: "orthographic",
@@ -2209,13 +2214,13 @@
 
       return {
         mode: "isometric",
-        tileW: zoomSize(tileW),
-        tileH: zoomSize(tileImgH),
-        halfTileW: zoomSize(halfTileW),
-        halfTileH: zoomSize(halfTileH),
-        tileCenterX: zoomSize(tileCenterX),
-        tileCenterY: zoomSize(tileCenterY),
-        itemFootY: zoomSize(itemFootY)
+        tileW: zoomSizeFor(tileW, zoom),
+        tileH: zoomSizeFor(tileImgH, zoom),
+        halfTileW: zoomSizeFor(halfTileW, zoom),
+        halfTileH: zoomSizeFor(halfTileH, zoom),
+        tileCenterX: zoomSizeFor(tileCenterX, zoom),
+        tileCenterY: zoomSizeFor(tileCenterY, zoom),
+        itemFootY: zoomSizeFor(itemFootY, zoom)
       };
     }
 
@@ -2236,6 +2241,41 @@
       };
     }
 
+    function getBoardVisualSize(zoom = boardZoom) {
+      const displaySize = getBoardDisplaySize();
+      const metrics = getBoardMetrics(zoom);
+      const isOrthographic = metrics.mode === "orthographic";
+      const minX = isOrthographic ? 0 : (0 - (displaySize.rows - 1)) * metrics.halfTileW;
+      const maxX = isOrthographic ? (displaySize.cols - 1) * metrics.tileW : ((displaySize.cols - 1) - 0) * metrics.halfTileW;
+      const minY = 0;
+      const maxY = isOrthographic ? (displaySize.rows - 1) * metrics.tileH : ((displaySize.cols - 1) + (displaySize.rows - 1)) * metrics.halfTileH;
+
+      return {
+        width: maxX + metrics.tileW - minX,
+        height: maxY + metrics.tileH - minY
+      };
+    }
+
+    function getPanBounds(zoom = boardZoom, scale = 1) {
+      const visualSize = getBoardVisualSize(zoom);
+      const overflowX = Math.max(0, visualSize.width * scale - viewport.clientWidth);
+      const overflowY = Math.max(0, visualSize.height * scale - viewport.clientHeight);
+      const edgePadding = isPhoneViewport() ? 54 : 96;
+
+      return {
+        x: Math.max(panLimit, overflowX / 2 + edgePadding),
+        y: Math.max(panLimit, overflowY / 2 + edgePadding)
+      };
+    }
+
+    function clampBoardPan(x = panX, y = panY, zoom = boardZoom, scale = 1) {
+      const bounds = getPanBounds(zoom, scale);
+      return {
+        x: snapScreenPixel(clamp(x, -bounds.x, bounds.x)),
+        y: snapScreenPixel(clamp(y, -bounds.y, bounds.y))
+      };
+    }
+
     function getPanForZoom(oldZoom, newZoom, oldPanX, oldPanY, focalPoint) {
       const ratio = newZoom / oldZoom;
       const origin = {
@@ -2251,10 +2291,7 @@
         y: origin.y + (unpannedPoint.y - origin.y) * ratio
       };
 
-      return {
-        x: snapScreenPixel(clamp(focalPoint.x - zoomedPoint.x, -panLimit, panLimit)),
-        y: snapScreenPixel(clamp(focalPoint.y - zoomedPoint.y, -panLimit, panLimit))
-      };
+      return clampBoardPan(focalPoint.x - zoomedPoint.x, focalPoint.y - zoomedPoint.y, newZoom);
     }
 
     function applyTransform(scale = 1, translateX = panX, translateY = panY) {
@@ -2604,6 +2641,7 @@
         enaRewardInventory,
         mizukiRewardInventory,
         activeOrder,
+        completedOrderCount,
         spawnedObjects
       };
     }
@@ -2625,6 +2663,7 @@
       enaRewardInventory = 0;
       mizukiRewardInventory = 0;
       activeOrder = null;
+      completedOrderCount = 0;
       panX = 0;
       panY = 0;
       isZenMode = zenMode;
@@ -2643,14 +2682,15 @@
         : maxSpawnerItems;
       nextRestoreAt = Number.isFinite(save.nextRestoreAt) ? save.nextRestoreAt : null;
       nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
-      panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
-      panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+      panX = Number.isFinite(save.panX) ? save.panX : 0;
+      panY = Number.isFinite(save.panY) ? save.panY : 0;
       isZenMode = typeof modeOverride === "boolean" ? modeOverride : save.isZenMode === true;
       syncBoardShape();
       boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
       if (isZenMode) {
         boardZoom = Math.min(boardZoom, normalizeBoardZoom(getDefaultZoom()));
       }
+      ({ x: panX, y: panY } = clampBoardPan(panX, panY, boardZoom));
       isBoardFlipped = save.isBoardFlipped === true;
       boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
       playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
@@ -2661,6 +2701,9 @@
       enaRewardInventory = Number.isFinite(save.enaRewardInventory) ? save.enaRewardInventory : 0;
       mizukiRewardInventory = Number.isFinite(save.mizukiRewardInventory) ? save.mizukiRewardInventory : 0;
       activeOrder = save.activeOrder || null;
+      completedOrderCount = Number.isFinite(save.completedOrderCount)
+        ? Math.max(0, Math.floor(save.completedOrderCount))
+        : 0;
       spawnedObjects.splice(
         0,
         spawnedObjects.length,
@@ -3066,7 +3109,33 @@
       return characterConfigs.filter((config) => config.unlockLevel <= playerLevel);
     }
 
-    function createNextOrder() {
+    function createOrderFromRequirements(requirements, isFixedOrder = false) {
+      const totalRequired = requirements.reduce((total, requirement) => total + requirement.count, 0);
+
+      return {
+        type: "reward",
+        requirements,
+        rewardCrates: totalRequired * 5,
+        rewardXp: totalRequired * 10,
+        isFixedOrder
+      };
+    }
+
+    function createFixedOrder(orderIndex) {
+      const fixedCharacterIndex = orderIndex % characterConfigs.length;
+      const fixedRewardCount = orderIndex < characterConfigs.length ? 1 : 2;
+      const config = characterConfigs[fixedCharacterIndex];
+
+      const order = createOrderFromRequirements([{
+        file: config.rewardFile,
+        name: `${config.finalName.replace(" 4", "")} reward`,
+        count: fixedRewardCount
+      }], true);
+      order.fixedOrderIndex = orderIndex;
+      return order;
+    }
+
+    function createRandomOrder() {
       const unlockedCharacters = getUnlockedCharacters();
       const availableCharacters = unlockedCharacters.length > 0 ? unlockedCharacters : [characterConfigs[0]];
       const totalRequired = Math.floor(Math.random() * 5) + 1;
@@ -3085,23 +3154,30 @@
       }
 
       const requirements = Array.from(requirementMap.values());
+      return createOrderFromRequirements(requirements);
+    }
 
-      return {
-        type: "reward",
-        requirements,
-        rewardCrates: totalRequired * 5,
-        rewardXp: totalRequired * 10
-      };
+    function createNextOrder() {
+      if (completedOrderCount < characterConfigs.length * 2) {
+        return createFixedOrder(completedOrderCount);
+      }
+
+      return createRandomOrder();
     }
 
     function ensureActiveOrder() {
       const requirements = getOrderRequirements(activeOrder);
+      const needsFixedOrder = completedOrderCount < characterConfigs.length * 2;
+      const hasWrongFixedOrder = needsFixedOrder && (
+        !activeOrder?.isFixedOrder ||
+        activeOrder.fixedOrderIndex !== completedOrderCount
+      );
       const hasInvalidRequirement = requirements.some((requirement) => {
         const config = characterConfigs.find((item) => item.rewardFile === requirement.file);
-        return !config || config.unlockLevel > playerLevel;
+        return !config || (!activeOrder?.isFixedOrder && config.unlockLevel > playerLevel);
       });
 
-      if (!activeOrder || requirements.length === 0 || hasInvalidRequirement) {
+      if (!activeOrder || requirements.length === 0 || hasWrongFixedOrder || hasInvalidRequirement) {
         activeOrder = createNextOrder();
         return;
       }
@@ -3118,6 +3194,7 @@
       const totalRequired = getOrderRequirementTotal(activeOrder);
       activeOrder.rewardCrates = Number.isFinite(activeOrder.rewardCrates) ? activeOrder.rewardCrates : totalRequired * 5;
       activeOrder.rewardXp = Number.isFinite(activeOrder.rewardXp) ? activeOrder.rewardXp : totalRequired * 10;
+      activeOrder.isFixedOrder = activeOrder.isFixedOrder === true;
     }
 
     function updateOrderPanel() {
@@ -3156,6 +3233,7 @@
       if (spawnerItems >= maxSpawnerItems) {
         nextRestoreAt = null;
       }
+      completedOrderCount += 1;
       activeOrder = createNextOrder();
       setOrderPanelOpen(false);
       wasOrderCompletable = false;
@@ -4253,6 +4331,7 @@
       lastOriginX = originX;
       lastOriginY = originY;
 
+      ({ x: panX, y: panY } = clampBoardPan(panX, panY, boardZoom));
       applyTransform();
 
       for (let y = 0; y < rows; y += 1) {
@@ -4367,8 +4446,7 @@
         return;
       }
 
-      panX = snapScreenPixel(clamp(startPanX + deltaX, -panLimit, panLimit));
-      panY = snapScreenPixel(clamp(startPanY + deltaY, -panLimit, panLimit));
+      ({ x: panX, y: panY } = clampBoardPan(startPanX + deltaX, startPanY + deltaY, boardZoom));
       updateTransform();
     });
 
