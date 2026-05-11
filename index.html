@@ -972,6 +972,74 @@
       image-rendering: pixelated;
     }
 
+    .win-popup {
+      position: absolute;
+      inset: 0;
+      z-index: 1250;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(24, 24, 44, 0.62);
+      backdrop-filter: blur(5px);
+      overflow: hidden;
+    }
+
+    .win-card {
+      position: relative;
+      z-index: 2;
+      width: min(360px, calc(100% - 28px));
+      padding: 22px 18px 18px;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      border-radius: 10px;
+      background: rgba(36, 36, 58, 0.96);
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 22px 44px rgba(15, 34, 54, 0.42);
+      animation: win-card-pop 420ms ease-out both;
+    }
+
+    .win-card h2 {
+      margin: 0 0 10px;
+      color: #ff6096;
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .win-card p {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    .win-close {
+      min-width: 96px;
+      height: 36px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #5cc63b;
+      color: #fff;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: inset 0 -3px 0 rgba(27, 114, 31, 0.28);
+    }
+
+    .confetti-piece {
+      position: absolute;
+      left: var(--confetti-x);
+      top: -24px;
+      z-index: 1;
+      width: 8px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--confetti-color);
+      transform: rotate(var(--confetti-rotate));
+      animation: confetti-fall var(--confetti-duration) linear var(--confetti-delay) forwards;
+    }
+
     .instruction-popup {
       position: absolute;
       left: 50%;
@@ -1053,6 +1121,28 @@
       }
     }
 
+    @keyframes win-card-pop {
+      0% {
+        transform: translateY(12px) scale(0.88);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes confetti-fall {
+      0% {
+        transform: translateY(-24px) rotate(var(--confetti-rotate));
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(calc(var(--viewport-h) + 80px)) rotate(calc(var(--confetti-rotate) + 540deg));
+        opacity: 0.86;
+      }
+    }
+
     .reward-inventory-counter {
       position: absolute;
       right: 24px;
@@ -1126,6 +1216,7 @@
       font-size: 14px;
       font-weight: 800;
       line-height: 1.2;
+      overflow-wrap: anywhere;
     }
 
     .order-reward {
@@ -1540,7 +1631,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.25</div>
+    <div class="version-line">version 0.0.26</div>
   </main>
   <script>
     const iso = document.getElementById("iso");
@@ -1675,13 +1766,24 @@
       { level: 7, xp: 740 },
       { level: 8, xp: 1040 },
       { level: 9, xp: 1400 },
-      { level: 10, xp: 1820 }
+      { level: 10, xp: 1820 },
+      { level: 11, xp: 2320 },
+      { level: 12, xp: 2910 },
+      { level: 13, xp: 3600 },
+      { level: 14, xp: 4400 },
+      { level: 15, xp: 5320 },
+      { level: 16, xp: 6370 },
+      { level: 17, xp: 7560 },
+      { level: 18, xp: 8900 },
+      { level: 19, xp: 10400 },
+      { level: 20, xp: 12070 }
     ];
     const levelUpSpawnerBonus = 10;
     let spawnerItems = maxSpawnerItems;
     let nextRestoreAt = null;
     let playerLevel = 1;
     let playerXp = 0;
+    let hasSeenLevel10Win = false;
     let rewardInventory = 0;
     let mafuyuRewardInventory = 0;
     let enaRewardInventory = 0;
@@ -2213,6 +2315,7 @@
         boardProjection,
         playerLevel,
         playerXp,
+        hasSeenLevel10Win,
         rewardInventory,
         mafuyuRewardInventory,
         enaRewardInventory,
@@ -2240,6 +2343,7 @@
       boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
       playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
       playerLevel = Number.isFinite(save.playerLevel) ? Math.max(1, save.playerLevel) : getLevelForXp(playerXp);
+      hasSeenLevel10Win = save.hasSeenLevel10Win === true;
       rewardInventory = Number.isFinite(save.rewardInventory) ? save.rewardInventory : 0;
       mafuyuRewardInventory = Number.isFinite(save.mafuyuRewardInventory) ? save.mafuyuRewardInventory : 0;
       enaRewardInventory = Number.isFinite(save.enaRewardInventory) ? save.enaRewardInventory : 0;
@@ -2279,6 +2383,7 @@
       nextObjectId = 1;
       playerLevel = 1;
       playerXp = 0;
+      hasSeenLevel10Win = false;
       rewardInventory = 0;
       mafuyuRewardInventory = 0;
       enaRewardInventory = 0;
@@ -2408,6 +2513,50 @@
       setTimeout(() => popup.remove(), 2850);
     }
 
+    function showWinPopup() {
+      const existingPopup = viewport.querySelector(".win-popup");
+      if (existingPopup) existingPopup.remove();
+
+      const popup = document.createElement("div");
+      const card = document.createElement("div");
+      const closeButton = document.createElement("button");
+      const confettiColors = ["#ff6096", "#fff06a", "#63e6e2", "#8c6cff", "#5cc63b", "#ffffff"];
+
+      popup.className = "win-popup";
+      card.className = "win-card";
+      card.innerHTML = `
+        <h2>You Win!</h2>
+        <p>You reached Level 10 and completed this version's main goal.</p>
+      `;
+
+      closeButton.className = "win-close";
+      closeButton.type = "button";
+      closeButton.textContent = "Continue";
+      closeButton.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      closeButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        popup.remove();
+      });
+
+      card.appendChild(closeButton);
+      popup.appendChild(card);
+
+      for (let index = 0; index < 56; index += 1) {
+        const piece = document.createElement("span");
+        piece.className = "confetti-piece";
+        piece.style.setProperty("--confetti-x", `${Math.random() * 100}%`);
+        piece.style.setProperty("--confetti-color", confettiColors[index % confettiColors.length]);
+        piece.style.setProperty("--confetti-rotate", `${Math.floor(Math.random() * 360)}deg`);
+        piece.style.setProperty("--confetti-duration", `${2200 + Math.floor(Math.random() * 1300)}ms`);
+        piece.style.setProperty("--confetti-delay", `${Math.floor(Math.random() * 800)}ms`);
+        popup.appendChild(piece);
+      }
+
+      viewport.appendChild(popup);
+    }
+
     function showInstructionPopup() {
       const existingPopup = viewport.querySelector(".instruction-popup");
       if (existingPopup) existingPopup.remove();
@@ -2462,6 +2611,11 @@
         gainedLevels * levelUpSpawnerBonus,
         getUnlockedBoardTileCount(nextLevel) - getUnlockedBoardTileCount(previousLevel)
       );
+
+      if (previousLevel < 10 && nextLevel >= 10 && !hasSeenLevel10Win) {
+        hasSeenLevel10Win = true;
+        setTimeout(showWinPopup, 420);
+      }
     }
 
     function getNextLevelXp() {
@@ -2530,12 +2684,44 @@
 
     function getAvailableOrderCount(order) {
       if (!order) return 0;
-      return getRewardInventory(order.file);
+      return getOrderRequirements(order).reduce((total, requirement) =>
+        total + Math.min(getRewardInventory(requirement.file), requirement.count),
+        0
+      );
+    }
+
+    function getOrderRequirementTotal(order) {
+      return getOrderRequirements(order).reduce((total, requirement) => total + requirement.count, 0);
+    }
+
+    function getOrderRequirements(order) {
+      if (!order) return [];
+
+      if (Array.isArray(order.requirements) && order.requirements.length > 0) {
+        return order.requirements;
+      }
+
+      if (order.file) {
+        return [{
+          file: order.file,
+          name: order.name || "Reward",
+          count: Number.isFinite(order.count) ? order.count : 1
+        }];
+      }
+
+      return [];
+    }
+
+    function isOrderCompletable(order) {
+      const requirements = getOrderRequirements(order);
+      return requirements.length > 0 && requirements.every((requirement) =>
+        getRewardInventory(requirement.file) >= requirement.count
+      );
     }
 
     function isActiveOrderCompletable() {
       ensureActiveOrder();
-      return getAvailableOrderCount(activeOrder) >= activeOrder.count;
+      return isOrderCompletable(activeOrder);
     }
 
     function setOrderPanelOpen(isOpen) {
@@ -2567,51 +2753,87 @@
 
     function createNextOrder() {
       const unlockedCharacters = getUnlockedCharacters();
-      const config = unlockedCharacters[Math.floor(Math.random() * unlockedCharacters.length)] || characterConfigs[0];
+      const availableCharacters = unlockedCharacters.length > 0 ? unlockedCharacters : [characterConfigs[0]];
+      const totalRequired = Math.floor(Math.random() * 5) + 1;
+      const requirementMap = new Map();
+
+      for (let index = 0; index < totalRequired; index += 1) {
+        const config = availableCharacters[Math.floor(Math.random() * availableCharacters.length)];
+        const current = requirementMap.get(config.rewardFile) || {
+          file: config.rewardFile,
+          name: `${config.finalName.replace(" 4", "")} reward`,
+          count: 0
+        };
+
+        current.count += 1;
+        requirementMap.set(config.rewardFile, current);
+      }
+
+      const requirements = Array.from(requirementMap.values());
 
       return {
         type: "reward",
-        file: config.rewardFile,
-        name: `${config.finalName.replace(" 4", "")} reward`,
-        count: 1,
-        rewardCrates: 5,
-        rewardXp: 10
+        requirements,
+        rewardCrates: totalRequired * 5,
+        rewardXp: totalRequired * 10
       };
     }
 
     function ensureActiveOrder() {
-      const orderConfig = activeOrder && characterConfigs.find((config) => config.rewardFile === activeOrder.file);
-      if (!orderConfig || orderConfig.unlockLevel > playerLevel) {
+      const requirements = getOrderRequirements(activeOrder);
+      const hasInvalidRequirement = requirements.some((requirement) => {
+        const config = characterConfigs.find((item) => item.rewardFile === requirement.file);
+        return !config || config.unlockLevel > playerLevel;
+      });
+
+      if (!activeOrder || requirements.length === 0 || hasInvalidRequirement) {
         activeOrder = createNextOrder();
         return;
       }
 
-      activeOrder.name = `${orderConfig.finalName.replace(" 4", "")} reward`;
-      activeOrder.count = 1;
-      activeOrder.rewardCrates = 5;
-      activeOrder.rewardXp = 10;
+      activeOrder.requirements = requirements.map((requirement) => {
+        const config = characterConfigs.find((item) => item.rewardFile === requirement.file);
+        return {
+          file: requirement.file,
+          name: config ? `${config.finalName.replace(" 4", "")} reward` : requirement.name,
+          count: Math.max(1, Math.min(5, Number.isFinite(requirement.count) ? requirement.count : 1))
+        };
+      });
+
+      const totalRequired = getOrderRequirementTotal(activeOrder);
+      activeOrder.rewardCrates = Number.isFinite(activeOrder.rewardCrates) ? activeOrder.rewardCrates : totalRequired * 5;
+      activeOrder.rewardXp = Number.isFinite(activeOrder.rewardXp) ? activeOrder.rewardXp : totalRequired * 10;
     }
 
     function updateOrderPanel() {
       ensureActiveOrder();
-      const available = getAvailableOrderCount(activeOrder);
-      orderIcon.src = `Asset/${activeOrder.file}`;
-      orderText.textContent = `${activeOrder.name} ${Math.min(available, activeOrder.count)}/${activeOrder.count}`;
+      const requirements = getOrderRequirements(activeOrder);
+      const totalAvailable = getAvailableOrderCount(activeOrder);
+      const totalRequired = getOrderRequirementTotal(activeOrder);
+
+      orderIcon.src = `Asset/${requirements[0]?.file || characterConfigs[0].rewardFile}`;
+      orderText.textContent = requirements.map((requirement) => {
+        const available = Math.min(getRewardInventory(requirement.file), requirement.count);
+        const label = requirement.name.replace(" reward", "");
+        return `${label} ${available}/${requirement.count}`;
+      }).join(" + ");
       orderReward.textContent = `+${activeOrder.rewardCrates} crates`;
       orderXpReward.textContent = `+${activeOrder.rewardXp || 0} EXP`;
-      const isCompletable = available >= activeOrder.count;
+      const isCompletable = totalAvailable >= totalRequired && isOrderCompletable(activeOrder);
       orderComplete.disabled = !isCompletable;
       syncOrderDrawerState(isCompletable);
     }
 
     function removeOrderItems(order) {
-      setRewardInventory(order.file, getRewardInventory(order.file) - order.count);
+      getOrderRequirements(order).forEach((requirement) => {
+        setRewardInventory(requirement.file, getRewardInventory(requirement.file) - requirement.count);
+      });
       updateRewardInventoryCount();
     }
 
     function completeOrder() {
       ensureActiveOrder();
-      if (getAvailableOrderCount(activeOrder) < activeOrder.count) return;
+      if (!isOrderCompletable(activeOrder)) return;
 
       removeOrderItems(activeOrder);
       spawnerItems += activeOrder.rewardCrates;
