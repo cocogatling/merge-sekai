@@ -553,7 +553,8 @@
     }
 
     .flip-button,
-    .projection-button {
+    .projection-button,
+    .zen-button {
       position: absolute;
       left: 22px;
       z-index: 20;
@@ -578,8 +579,18 @@
       top: 164px;
     }
 
+    .zen-button {
+      top: 210px;
+    }
+
+    .zen-button.is-active {
+      background: rgba(255, 96, 150, 0.22);
+      color: #fff;
+    }
+
     .flip-button:hover,
-    .projection-button:hover {
+    .projection-button:hover,
+    .zen-button:hover {
       background: rgba(54, 54, 86, 0.9);
     }
 
@@ -1362,7 +1373,8 @@
       .xp-counter,
       .reset-button,
       .flip-button,
-      .projection-button {
+      .projection-button,
+      .zen-button {
         min-height: 30px;
         padding: 0 10px;
         font-size: 13px;
@@ -1395,6 +1407,11 @@
 
       .projection-button {
         display: none;
+      }
+
+      .zen-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(12px, env(safe-area-inset-top)) + 124px);
       }
 
       .reward-inventory-counter {
@@ -1527,6 +1544,11 @@
         display: none;
       }
 
+      .zen-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(14px, env(safe-area-inset-top)) + 138px);
+      }
+
       .reward-inventory-counter {
         right: max(10px, env(safe-area-inset-right));
         top: max(14px, env(safe-area-inset-top));
@@ -1556,6 +1578,10 @@
 
       .discord-activity .flip-button {
         top: calc(max(14px, env(safe-area-inset-top)) + 124px);
+      }
+
+      .discord-activity .zen-button {
+        top: calc(max(14px, env(safe-area-inset-top)) + 168px);
       }
 
       .discord-activity .reward-inventory-counter {
@@ -1607,7 +1633,8 @@
     @media (orientation: portrait) and (max-width: 480px) {
       .xp-counter,
       .reset-button,
-      .flip-button {
+      .flip-button,
+      .zen-button {
         min-height: 30px;
         padding: 0 10px;
         font-size: 13px;
@@ -1629,6 +1656,10 @@
 
       .flip-button {
         top: calc(max(12px, env(safe-area-inset-top)) + 86px);
+      }
+
+      .zen-button {
+        top: calc(max(12px, env(safe-area-inset-top)) + 126px);
       }
 
       .reward-inventory-counter {
@@ -1718,6 +1749,7 @@
       </div>
       <button id="flipButton" class="flip-button" type="button">Portrait</button>
       <button id="projectionButton" class="projection-button" type="button">Iso</button>
+      <button id="zenButton" class="zen-button" type="button" aria-pressed="false">Zen</button>
       <button id="spawner" class="spawner" type="button" aria-label="Spawn item">
         <img src="Asset/box.png" alt="" />
         <span id="spawnerCount" class="spawner-count">60/60</span>
@@ -1784,6 +1816,7 @@
     const zoomInButton = document.getElementById("zoomInButton");
     const flipButton = document.getElementById("flipButton");
     const projectionButton = document.getElementById("projectionButton");
+    const zenButton = document.getElementById("zenButton");
     const xpCounter = document.getElementById("xpCounter");
     const xpCount = document.getElementById("xpCount");
     const xpDetail = document.getElementById("xpDetail");
@@ -1811,10 +1844,14 @@
     const portraitPhoneMinZoom = 2;
     const portraitPhoneMaxZoom = 8;
     const portraitPhoneDefaultZoom = 3;
+    const zenDesktopMinZoom = 1.25;
+    const zenDesktopMaxZoom = 8;
+    const zenPhoneMinZoom = 1.25;
+    const zenPhoneMaxZoom = 6;
     const desktopZoomStep = 0.25;
     const mobileZoomStep = 0.25;
 
-    const boardShape = [
+    const standardBoardShape = [
       "XXXX",
       "XXXX",
       "XXXX",
@@ -1825,7 +1862,7 @@
       "XXXX",
       "XXXX"
     ];
-    const boardUnlockLevels = [
+    const standardBoardUnlockLevels = [
       [8, 8, 8, 8],
       [6, 6, 8, 8],
       [6, 6, 6, 6],
@@ -1836,18 +1873,34 @@
       [1, 1, 1, 1],
       [1, 1, 1, 1]
     ];
-    const rows = boardShape.length;
-    const cols = boardShape[0].length;
+    const zenBoardShape = [
+      "..XXX..",
+      ".XXXXX.",
+      "XXXXXXX",
+      "XXXXXXX",
+      "XXXXXXX",
+      ".XXXXX.",
+      "..XXX.."
+    ];
+    const zenBoardUnlockLevels = zenBoardShape.map((row) =>
+      Array.from(row, (cell) => cell === "X" ? 1 : Infinity)
+    );
+    let boardShape = standardBoardShape;
+    let boardUnlockLevels = standardBoardUnlockLevels;
+    let rows = boardShape.length;
+    let cols = boardShape[0].length;
     const halfTileW = tileW / 2;
     const halfTileH = tileStepY / 2;
     const tileCenterX = tileW / 2;
     const tileCenterY = tileImgH / 2;
     const itemFootY = 11;
     const LOCAL_SAVE_KEY = "merge-sekai-save-v1";
+    const ZEN_SAVE_KEY = "merge-sekai-zen-save-v1";
     const spawnPadding = 1;
     const panLimit = 280;
     const mousePanDeadzone = 4;
     const touchPanDeadzone = 10;
+    let isZenMode = false;
     let boardZoom = getDefaultZoom();
     let isBoardFlipped = getDefaultBoardFlipped();
     let boardProjection = "orthographic";
@@ -2062,19 +2115,62 @@
       return isPortraitPhoneViewport() || boardProjection === "orthographic";
     }
 
+    function syncBoardShape() {
+      boardShape = isZenMode ? zenBoardShape : standardBoardShape;
+      boardUnlockLevels = isZenMode ? zenBoardUnlockLevels : standardBoardUnlockLevels;
+      rows = boardShape.length;
+      cols = boardShape[0].length;
+    }
+
+    function getBoardShapeCapacity(shape = boardShape) {
+      return shape.reduce((total, row) =>
+        total + Array.from(row).filter((cell) => cell === "X").length,
+        0
+      );
+    }
+
+    function canFitCurrentObjectsInShape(shape) {
+      return spawnedObjects.length <= getBoardShapeCapacity(shape);
+    }
+
+    function showZenSpaceWarning() {
+      showSpaceWarning("Clear board space before Zen!");
+    }
+
+
     function isMobileOrderDrawer() {
       return window.matchMedia("(orientation: portrait) and (max-width: 900px), (orientation: landscape) and (max-height: 520px)").matches;
     }
 
+    function getZenFitZoom() {
+      const viewportW = viewport.clientWidth || window.innerWidth || 0;
+      const viewportH = viewport.clientHeight || window.innerHeight || 0;
+      const sideUiAllowance = isPhoneViewport() ? 36 : 260;
+      const verticalUiAllowance = isPhoneViewport() ? 160 : 124;
+      const availableW = Math.max(224, viewportW - sideUiAllowance);
+      const availableH = Math.max(224, viewportH - verticalUiAllowance);
+      const fitZoom = Math.min(
+        availableW / (cols * 32),
+        availableH / (rows * 32)
+      );
+      const minZoom = isPhoneViewport() ? zenPhoneMinZoom : zenDesktopMinZoom;
+      const maxZoom = isPhoneViewport() ? zenPhoneMaxZoom : zenDesktopMaxZoom;
+
+      return clamp(Math.floor(fitZoom * 4) / 4, minZoom, maxZoom);
+    }
+
     function getMinZoom() {
+      if (isZenMode) return isPhoneViewport() ? zenPhoneMinZoom : zenDesktopMinZoom;
       return isPhoneViewport() ? portraitPhoneMinZoom : desktopMinZoom;
     }
 
     function getMaxZoom() {
+      if (isZenMode) return isPhoneViewport() ? zenPhoneMaxZoom : zenDesktopMaxZoom;
       return isPhoneViewport() ? portraitPhoneMaxZoom : desktopMaxZoom;
     }
 
     function getDefaultZoom() {
+      if (isZenMode) return getZenFitZoom();
       return isPhoneViewport() ? portraitPhoneDefaultZoom : defaultZoom;
     }
 
@@ -2422,6 +2518,16 @@
       );
     }
 
+    function updateZenButton() {
+      zenButton.textContent = isZenMode ? "Zen On" : "Zen";
+      zenButton.classList.toggle("is-active", isZenMode);
+      zenButton.setAttribute("aria-pressed", isZenMode ? "true" : "false");
+      zenButton.setAttribute(
+        "aria-label",
+        isZenMode ? "Switch to normal board" : "Switch to zen mode"
+      );
+    }
+
     function toggleBoardOrientation() {
       isBoardFlipped = !isBoardFlipped;
       updateFlipButton();
@@ -2436,6 +2542,27 @@
       saveGame();
     }
 
+    function toggleZenMode() {
+      saveGame();
+      const nextZenMode = !isZenMode;
+      loadModeSave(nextZenMode);
+      normalizeBoardObjects();
+      refreshFinalCharacterRewards();
+      ensureActiveOrder();
+      applySpawnerRestoreCatchup();
+      updateZenButton();
+      updateFlipButton();
+      updateProjectionButton();
+      updateZoomControls();
+      updateSpawnerCount();
+      updateSpawnerTimer();
+      updateXpCount();
+      updateRewardInventoryCount();
+      updateOrderPanel();
+      buildGrid();
+      saveGame();
+    }
+
     function updateSpawnerCount() {
       spawnerCount.textContent = `${spawnerItems}/${maxSpawnerItems}`;
       spawner.classList.toggle("is-empty", spawnerItems === 0);
@@ -2444,13 +2571,17 @@
       spawnerTimer.hidden = spawnerItems >= maxSpawnerItems;
     }
 
-    function getLocalSave() {
-      const raw = localStorage.getItem(LOCAL_SAVE_KEY);
+    function getSaveKeyForMode(zenMode = isZenMode) {
+      return zenMode ? ZEN_SAVE_KEY : LOCAL_SAVE_KEY;
+    }
+
+    function getLocalSave(zenMode = isZenMode) {
+      const raw = localStorage.getItem(getSaveKeyForMode(zenMode));
       return raw ? JSON.parse(raw) : null;
     }
 
-    function setLocalSave(saveData) {
-      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(saveData));
+    function setLocalSave(saveData, zenMode = isZenMode) {
+      localStorage.setItem(getSaveKeyForMode(zenMode), JSON.stringify(saveData));
     }
 
     function createNewSave() {
@@ -2464,6 +2595,7 @@
         boardZoom,
         isBoardFlipped,
         boardProjection,
+        isZenMode,
         playerLevel,
         playerXp,
         hasSeenLevel10Win,
@@ -2478,10 +2610,34 @@
 
     function saveGame() {
       const save = createNewSave();
-      setLocalSave(save);
+      setLocalSave(save, isZenMode);
     }
 
-    function applySaveData(save) {
+    function resetStateForMode(zenMode) {
+      spawnerItems = maxSpawnerItems;
+      nextRestoreAt = null;
+      nextObjectId = 1;
+      playerLevel = 1;
+      playerXp = 0;
+      hasSeenLevel10Win = false;
+      rewardInventory = 0;
+      mafuyuRewardInventory = 0;
+      enaRewardInventory = 0;
+      mizukiRewardInventory = 0;
+      activeOrder = null;
+      panX = 0;
+      panY = 0;
+      isZenMode = zenMode;
+      syncBoardShape();
+      boardZoom = normalizeBoardZoom(getDefaultZoom());
+      isBoardFlipped = getDefaultBoardFlipped();
+      boardProjection = "orthographic";
+      draggedObject = null;
+      spawnedObjects.splice(0, spawnedObjects.length);
+      removeDragGhosts();
+    }
+
+    function applySaveData(save, modeOverride = null) {
       spawnerItems = Number.isFinite(save.spawnerItems)
         ? clamp(save.spawnerItems, 0, maxSpawnerItems)
         : maxSpawnerItems;
@@ -2489,7 +2645,12 @@
       nextObjectId = Number.isFinite(save.nextObjectId) ? save.nextObjectId : 1;
       panX = Number.isFinite(save.panX) ? clamp(save.panX, -panLimit, panLimit) : 0;
       panY = Number.isFinite(save.panY) ? clamp(save.panY, -panLimit, panLimit) : 0;
+      isZenMode = typeof modeOverride === "boolean" ? modeOverride : save.isZenMode === true;
+      syncBoardShape();
       boardZoom = Number.isFinite(save.boardZoom) ? normalizeBoardZoom(save.boardZoom) : normalizeBoardZoom(getDefaultZoom());
+      if (isZenMode) {
+        boardZoom = Math.min(boardZoom, normalizeBoardZoom(getDefaultZoom()));
+      }
       isBoardFlipped = save.isBoardFlipped === true;
       boardProjection = save.boardProjection === "orthographic" ? "orthographic" : "isometric";
       playerXp = Number.isFinite(save.playerXp) ? save.playerXp : 0;
@@ -2511,49 +2672,52 @@
       );
     }
 
-    async function loadGame() {
-      try {
-        const localSave = getLocalSave();
-
-        if (localSave) {
-          applySaveData(localSave);
-          return localSave;
+    function loadModeSave(zenMode) {
+      const localSave = getLocalSave(zenMode);
+      if (localSave) {
+        if (!zenMode && localSave.isZenMode === true) {
+          if (!getLocalSave(true)) setLocalSave(localSave, true);
+          resetStateForMode(false);
+          return createNewSave();
         }
 
-        return createNewSave();
+        applySaveData(localSave, zenMode);
+        return localSave;
+      }
+
+      if (zenMode) {
+        const legacySave = getLocalSave(false);
+        if (legacySave && legacySave.isZenMode === true) {
+          setLocalSave(legacySave, true);
+          applySaveData(legacySave, true);
+          return legacySave;
+        }
+      }
+
+      resetStateForMode(zenMode);
+      return createNewSave();
+    }
+
+    async function loadGame() {
+      try {
+        return loadModeSave(false);
       } catch (error) {
         console.warn("Could not load saved game.", error);
+        resetStateForMode(false);
         return createNewSave();
       }
     }
 
     function resetGame() {
-      localStorage.removeItem(LOCAL_SAVE_KEY);
-      spawnerItems = maxSpawnerItems;
-      nextRestoreAt = null;
-      nextObjectId = 1;
-      playerLevel = 1;
-      playerXp = 0;
-      hasSeenLevel10Win = false;
-      rewardInventory = 0;
-      mafuyuRewardInventory = 0;
-      enaRewardInventory = 0;
-      mizukiRewardInventory = 0;
-      activeOrder = null;
-      panX = 0;
-      panY = 0;
-      boardZoom = normalizeBoardZoom(getDefaultZoom());
-      isBoardFlipped = getDefaultBoardFlipped();
-      boardProjection = "orthographic";
-      draggedObject = null;
-      spawnedObjects.splice(0, spawnedObjects.length);
-
-      removeDragGhosts();
+      const currentZenMode = isZenMode;
+      localStorage.removeItem(getSaveKeyForMode(currentZenMode));
+      resetStateForMode(currentZenMode);
 
       updateTransform();
       updateZoomControls();
       updateFlipButton();
       updateProjectionButton();
+      updateZenButton();
       updateSpawnerCount();
       updateSpawnerTimer();
       updateXpCount();
@@ -3002,13 +3166,13 @@
       buildGrid();
     }
 
-    function showSpaceWarning() {
+    function showSpaceWarning(message = "Need more empty space!") {
       const existingWarning = viewport.querySelector(".space-warning");
       if (existingWarning) existingWarning.remove();
 
       const warning = document.createElement("div");
       warning.className = "space-warning";
-      warning.textContent = "Need more empty space!";
+      warning.textContent = message;
       viewport.appendChild(warning);
       setTimeout(() => warning.remove(), 1550);
     }
@@ -3085,7 +3249,7 @@
     }
 
     function isBoardTileUnlocked(x, y) {
-      return isBoardTile(x, y) && playerLevel >= boardUnlockLevels[y][x];
+      return isBoardTile(x, y) && (isZenMode || playerLevel >= boardUnlockLevels[y][x]);
     }
 
     function isPlaceableTile(x, y) {
@@ -4342,6 +4506,15 @@
       toggleBoardProjection();
     });
 
+    zenButton.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+
+    zenButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleZenMode();
+    });
+
     viewport.addEventListener("wheel", (event) => {
       event.preventDefault();
       const wheelZoomStep = desktopZoomStep;
@@ -4396,6 +4569,7 @@
       updateZoomControls();
       updateFlipButton();
       updateProjectionButton();
+      updateZenButton();
       updateRewardInventoryCount();
       updateOrderPanel();
       saveGame();
