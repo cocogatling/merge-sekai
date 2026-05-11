@@ -1328,6 +1328,149 @@
       }
     }
 
+    @media (orientation: landscape) and (max-height: 520px) {
+      body {
+        min-height: 100dvh;
+        display: block;
+        overflow: hidden;
+      }
+
+      .game-shell {
+        position: relative;
+        width: 100vw;
+        height: 100dvh;
+        gap: 0;
+      }
+
+      .viewport {
+        width: 100vw;
+        height: 100dvh;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .version-line {
+        position: absolute;
+        left: 50%;
+        bottom: max(4px, env(safe-area-inset-bottom));
+        z-index: 40;
+        transform: translateX(-50%);
+        font-size: 12px;
+        text-shadow: 0 2px 4px rgba(15, 34, 54, 0.5);
+      }
+
+      .xp-counter,
+      .reset-button,
+      .flip-button,
+      .projection-button {
+        min-height: 30px;
+        padding: 0 10px;
+        font-size: 13px;
+      }
+
+      .xp-counter {
+        left: max(12px, env(safe-area-inset-left));
+        top: max(12px, env(safe-area-inset-top));
+      }
+
+      .xp-counter img {
+        width: 20px;
+        height: 20px;
+      }
+
+      .zoom-controls {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(12px, env(safe-area-inset-top)) + 44px);
+      }
+
+      .zoom-button {
+        width: 30px;
+        height: 30px;
+      }
+
+      .flip-button {
+        left: max(12px, env(safe-area-inset-left));
+        top: calc(max(12px, env(safe-area-inset-top)) + 84px);
+      }
+
+      .projection-button {
+        display: none;
+      }
+
+      .reward-inventory-counter {
+        right: max(12px, env(safe-area-inset-right));
+        top: max(12px, env(safe-area-inset-top));
+        gap: 6px;
+      }
+
+      .reward-inventory-item {
+        min-width: 58px;
+        padding: 6px 8px;
+        gap: 6px;
+        font-size: 15px;
+      }
+
+      .reward-inventory-item img {
+        width: 22px;
+        height: 22px;
+      }
+
+      .spawner {
+        width: 66px;
+        height: 66px;
+        bottom: calc(max(18px, env(safe-area-inset-bottom)) + 28px);
+      }
+
+      .spawner-count {
+        min-width: 62px;
+        font-size: 16px;
+      }
+
+      .spawner-timer {
+        bottom: -26px;
+        min-width: 74px;
+        font-size: 12px;
+      }
+
+      .order-toggle {
+        display: grid;
+        place-items: center;
+        left: calc(50% - 86px);
+        bottom: calc(max(18px, env(safe-area-inset-bottom)) + 46px);
+        width: 38px;
+        height: 38px;
+      }
+
+      .order-panel {
+        left: max(12px, env(safe-area-inset-left));
+        bottom: calc(max(12px, env(safe-area-inset-bottom)) + 58px);
+        width: min(220px, calc(100vw - 150px));
+        padding: 10px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(10px) scale(0.98);
+        transform-origin: bottom left;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      .order-panel.is-open {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+      }
+
+      .reset-button {
+        left: auto;
+        top: auto;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(max(14px, env(safe-area-inset-bottom)) + 16px);
+      }
+
+      .soft-fade {
+        background: radial-gradient(720px 420px at 50% 45%, rgba(255, 255, 255, 0.13), transparent 76%);
+      }
+    }
+
     @media (orientation: portrait) and (max-width: 900px) {
       body {
         min-height: 100dvh;
@@ -1631,7 +1774,7 @@
     </div>
     </div>
 
-    <div class="version-line">version 0.0.26</div>
+    <div class="version-line">version 0.0.27</div>
   </main>
   <script>
     const iso = document.getElementById("iso");
@@ -1899,6 +2042,14 @@
       return window.matchMedia("(orientation: portrait) and (max-width: 480px)").matches;
     }
 
+    function isLandscapePhoneViewport() {
+      return window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches;
+    }
+
+    function isPhoneViewport() {
+      return isPortraitPhoneViewport() || isLandscapePhoneViewport();
+    }
+
     function isDiscordActivity() {
       return document.documentElement.classList.contains("discord-activity");
     }
@@ -1912,19 +2063,19 @@
     }
 
     function isMobileOrderDrawer() {
-      return window.matchMedia("(orientation: portrait) and (max-width: 900px)").matches;
+      return window.matchMedia("(orientation: portrait) and (max-width: 900px), (orientation: landscape) and (max-height: 520px)").matches;
     }
 
     function getMinZoom() {
-      return isPortraitPhoneViewport() ? portraitPhoneMinZoom : desktopMinZoom;
+      return isPhoneViewport() ? portraitPhoneMinZoom : desktopMinZoom;
     }
 
     function getMaxZoom() {
-      return isPortraitPhoneViewport() ? portraitPhoneMaxZoom : desktopMaxZoom;
+      return isPhoneViewport() ? portraitPhoneMaxZoom : desktopMaxZoom;
     }
 
     function getDefaultZoom() {
-      return isPortraitPhoneViewport() ? portraitPhoneDefaultZoom : defaultZoom;
+      return isPhoneViewport() ? portraitPhoneDefaultZoom : defaultZoom;
     }
 
     function getDefaultBoardFlipped() {
